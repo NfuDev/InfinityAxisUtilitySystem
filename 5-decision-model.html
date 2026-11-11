@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Part 5: Building a decision</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+  <p class="kicker">Part 5 &middot; Chapters 14 to 16</p>
+  <h1>Building a decision, changing it, and varying it</h1>
+  <p class="lead">Chapter 14 assembles every tool so far into one complete decision. Chapter 15 asks when that decision should be reconsidered. Chapter 16 asks why the agent should not always take the top answer.</p>
+
+  <h2 id="what">Decide what the decision is</h2>
+  <p>The book treats a single decision as the atom of behaviour. Before scoring anything you choose how much goes inside that atom.</p>
+  <p>Its example: "which enemy do I attack" and "which weapon do I use" could be two decisions. Do them separately and you pick the most threatening enemy, then the best weapon in general. But one enemy may be weak against a weapon that is poor in general. Only by scoring every <em>pair</em> (enemy, weapon) as one option do you find that. This is the Prisoner's Dilemma lesson from Part 1: optimising one choice in isolation gives an acceptable answer, not the best one.</p>
+  <div class="note impl"><b>Rule of thumb from the book</b><p>Group choices into one decision when they strongly depend on each other. Keep them apart when they do not, because every grouping multiplies the number of options (3 enemies &times; 4 weapons = 12).</p></div>
+
+  <h2 id="steps">The four steps of chapter 14</h2>
+  <div class="flow">
+    <div><b>Identify factors</b>Weapon damage and accuracy, both by distance. Each enemy's health, skill, weapon. My health. Distance to the objective.</div><div class="arrow">&rarr;</div>
+    <div><b>Identify relationships</b>Accuracy &times; damage = damage per second. Health / DPS = time to kill.</div><div class="arrow">&rarr;</div>
+    <div><b>Build connections</b>Time to kill him and time for him to kill me become one threat ratio. Threat and urgency become one score.</div><div class="arrow">&rarr;</div>
+    <div><b>Score and compare</b>One number per (enemy, weapon) pair. Sort.</div>
+  </div>
+
+  <h3>Step 1: the raw data</h3>
+  <p>Three enemy types differ in aim: Bad Dude &minus;20% accuracy, Evil Dude 0%, Arch Dude +10%. Four weapons each have a damage curve and an accuracy curve, both built from the shifted polynomial in Part 3.</p>
+  <div class="formula">value(dist) = Base + Modifier &minus; (dist &minus; Shift)^Exp / Divisor &nbsp;&nbsp; clamped at 0</div>
+  <div class="tbl-wrap"><table>
+    <tr><th>Weapon</th><th class="num">Range</th><th class="num">Base dmg/s</th><th class="num">Dmg exp</th><th class="num">Dmg div</th><th class="num">Dmg shift</th><th class="num">Base acc</th><th class="num">Acc exp</th><th class="num">Acc div</th><th class="num">Acc shift</th></tr>
+    <tr><td>Pistol</td><td class="num">137</td><td class="num">10</td><td class="num">2.2</td><td class="num">5,000</td><td class="num">0</td><td class="num">0.70</td><td class="num">1.5</td><td class="num">3,000</td><td class="num">0</td></tr>
+    <tr><td>Shotgun</td><td class="num">57</td><td class="num">50</td><td class="num">2.1</td><td class="num">100</td><td class="num">0</td><td class="num">0.95</td><td class="num">2.2</td><td class="num">15,000</td><td class="num">0</td></tr>
+    <tr><td>Machine gun</td><td class="num">300</td><td class="num">30</td><td class="num">2.0</td><td class="num">5,000</td><td class="num">0</td><td class="num">0.80</td><td class="num">1.8</td><td class="num">50,000</td><td class="num">0</td></tr>
+    <tr><td>Rocket launcher</td><td class="num">300</td><td class="num">100</td><td class="num">2.0</td><td class="num">1,500</td><td class="num">50</td><td class="num">0.50</td><td class="num">2.0</td><td class="num">30,000</td><td class="num">50</td></tr>
+  </table></div>
+  <div class="lab">
+    <h4>The weapon curves</h4>
+    <p class="hint">These are the book's figures 14.4 to 14.6. "Effectiveness" is the first relationship: accuracy times damage.</p>
+    <div class="row" id="wc-modes">
+      <button class="btn on" type="button" data-m="acc">Accuracy</button>
+      <button class="btn" type="button" data-m="dmg">Damage per second</button>
+      <button class="btn" type="button" data-m="eff">Effectiveness (accuracy &times; damage)</button>
+    </div>
+    <canvas class="plot tall" id="wc-plot" style="margin-top:10px"></canvas>
+  </div>
+  <p>Look at effectiveness. The shotgun wins inside about 40 feet and is useless beyond 57. The rocket launcher is best from mid range. The pistol is never best, but it is the only thing you have when the others are empty. No single "best weapon" exists; it depends on distance, which is exactly why the weapon cannot be chosen before the target.</p>
+
+  <h3>Steps 2 and 3: relationships and connections</h3>
+<pre><code>// Relationship: how long to bring a health pool to zero
+double TimeToKill(double health, double damage, double accuracy) {
+    double dps = accuracy * damage;
+    return dps != 0 ? health / dps : 1000;      // 1000 = "effectively never"
+}
+
+timeToKillEnemy = TimeToKill(enemy.health, myWeapon.Damage(dist),    myWeapon.Accuracy(dist));
+timeToKillMe    = TimeToKill(my.health,    enemy.weapon.Damage(dist), enemy.weapon.Accuracy(dist, enemy.accuracyModifier));
+
+// Connection 1: a weighted mean. Killing him fast is 3x as important as surviving long.
+threatRatio = (timeToKillMe + 3 * timeToKillEnemy) / 4;        // lower = attack this one first
+
+// Connection 2: how close is he to the objective (a detonator)?
+urgency = max(0, 1 - pow(distToGoal, 0.4) / 10);               // 1 next to it, 0 far away
+
+// Final score. Lower is better.
+score = threatRatio / urgency;</code></pre>
+  <p>Notice the three different combining methods in a dozen lines: a product (accuracy &times; damage), a weighted mean (threat ratio), and a division (so that rising urgency pulls the score down sharply). The book picks each one by asking how the two inputs should trade off, then checks a few sample rows by hand.</p>
+  <div class="note book"><b>The 1,000-second clamp is deliberate</b><p>A weapon that cannot reach the target has zero damage per second, which would divide by zero. Clamping to 1,000 gives that pair an enormous score, so it sorts to the bottom without any special case. Chapter 16 relies on this later.</p></div>
+
+  <h3>Step 4: the simulator</h3>
+  <div class="lab">
+    <h4>Which Dude to kill, with what</h4>
+    <p class="hint">Edit any cell. Every (Dude, weapon) pair is scored and ranked; lowest score wins. Distances are in feet. Presets 1 to 3 reproduce the book's test tables.</p>
+    <div class="row" id="dd-presets">
+      <button class="btn" type="button" data-p="t1">1. All at 150 ft with machine guns</button>
+      <button class="btn" type="button" data-p="t2">2. Baddie advances to 100 ft</button>
+      <button class="btn" type="button" data-p="t3">3. Boss Man nears the detonator</button>
+      <button class="btn" type="button" data-p="mine">4. Eight Dudes (my own mix)</button>
+    </div>
+    <div class="tbl-wrap"><table id="dd-table"></table></div>
+    <div class="grid2 even">
+      <div class="ctls">
+        <label class="ctl"><span>My health <output></output></span><input type="range" id="dd-hp" min="10" max="300" step="10" value="200"></label>
+        <label class="ctl"><span>Importance of killing fast vs. surviving <output></output></span><input type="range" id="dd-w" min="0" max="6" step="0.5" value="3"></label>
+        <div class="row" style="font-size:14px">
+          <label><input type="checkbox" id="dd-a0" checked> Pistol</label>
+          <label><input type="checkbox" id="dd-a1" checked> Shotgun</label>
+          <label><input type="checkbox" id="dd-a2" checked> Machine gun</label>
+          <label><input type="checkbox" id="dd-a3" checked> Rockets</label>
+        </div>
+        <div class="verdict" id="dd-verdict"></div>
+      </div>
+      <div class="tbl-wrap" style="max-height:330px;overflow-y:auto"><table id="dd-out"></table></div>
+    </div>
+  </div>
+  <p style="font-size:14px;color:var(--ink-2)">A note on fidelity: the book's code listing starts the agent at 100 health, but its printed result tables only come out right with about 200, so the slider starts there. With that setting, and with damage truncated to a whole number as the book's code does, preset 1 gives the book's 18.1 for Evilmeister with the machine gun.</p>
+  <p>Try the things the book tries. Give Evilmeister a shotgun in preset 1: at 150 feet he cannot hurt you, his threat number explodes, and he drops off the list. Untick weapons to simulate running out of ammo and watch the pistol become a real answer.</p>
+  <div class="note book"><b>The moral the book draws</b><p>You cannot decide without information. Information is ambiguous until you relate it to something else. Small decisions can be combined into larger ones. And then: information rarely stays the same for long, which is the next chapter.</p></div>
+
+  <h2 id="changing">Changing a decision (chapter 15)</h2>
+  <h3>How often to think</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Approach</th><th>How it works</th><th>Problem</th></tr>
+    <tr><td><b>Every frame</b></td><td>Rescore everything continuously.</td><td>Wasteful, and faster than any human reacts. The book cites about 240 ms as a typical human reaction time, roughly 12 frames.</td></tr>
+    <tr><td><b>Fixed period</b></td><td>Rescore every N milliseconds. Stagger agents across frames so only a fraction think each frame.</td><td>Can miss sudden events between ticks.</td></tr>
+    <tr><td><b>Polling</b></td><td>Check whether inputs changed, and rescore only then.</td><td>The checking itself is expensive, and you must remember old values.</td></tr>
+    <tr><td><b>Event-driven</b></td><td>The thing that changed broadcasts it. A thrown grenade tells nearby agents.</td><td>Brittle alone: agents stand idle if no event arrives, and message order matters.</td></tr>
+  </table></div>
+  <div class="note impl"><b>The book's recommendation: a hybrid</b>
+    <p>Give each kind of information its own timer, sized to how fast it really changes, and let events interrupt. For the Dudes: rescore after each shot (the natural smallest unit of action), and let "a rocket is coming at me" interrupt at once. Between choosing and firing, keep asking one cheap question: <em>can I still do this?</em> If the target died or went behind cover, drop the plan immediately.</p></div>
+
+  <h3>Strobing and decision momentum</h3>
+  <p>The book's "Flotilla of Futility": an AI fleet sails toward an undefended city. The player moves troops in just before it arrives, leaving another city empty. The fleet turns around. The player moves the troops back. The fleet sails back and forth forever and never fires a shot.</p>
+  <p>The AI rescored correctly every time. What it lacked was any cost for abandoning what it was already doing. The fix is <em>decision momentum</em>: new information has to beat not only the old score but the commitment already made.</p>
+  <div class="lab">
+    <h4>Strobing against momentum</h4>
+    <p class="hint">Two targets with nearly equal, noisy utility. The coloured strip under the plot shows which one the agent is attacking at each moment.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Momentum bonus for the current choice <output></output></span><input type="range" id="s-mom" min="0" max="0.4" step="0.01" value="0"></label>
+        <label class="ctl"><span>Noise in the inputs <output></output></span><input type="range" id="s-noise" min="0" max="0.3" step="0.01" value="0.1"></label>
+        <label class="ctl"><span>Rescore every N ticks <output></output></span><input type="range" id="s-every" min="1" max="20" value="1"></label>
+        <div class="row"><button class="btn" id="s-new" type="button">New random situation</button></div>
+        <div class="readout" id="s-read"></div>
+      </div>
+      <div><canvas class="plot" id="s-plot"></canvas></div>
+    </div>
+  </div>
+  <p>With no momentum the agent switches dozens of times and achieves nothing. A small bonus removes almost all of it while still allowing a switch when one option becomes clearly better. Thinking less often helps too, but it only hides strobing; momentum removes the cause.</p>
+
+  <h3>Three more factors that create momentum naturally</h3>
+  <ul>
+    <li><b>Time commitment.</b> Include the cost of getting there. The fleet's score for a city should fall with travel time, and time already spent sailing is part of the cost of turning round.</li>
+    <li><b>Information expiry.</b> Facts about things you do not control go stale. Scale your confidence in "that city is undefended" by how long it will take to act on it. Far-away opportunities should be trusted less. The book warns not to overdo this, or the fleet never leaves port.</li>
+    <li><b>The value of finishing.</b> Use <em>increasing</em> marginal utility near completion. An enemy at 10% health is worth finishing before switching, and a building at 90% is worth completing. The book suggests running time-to-kill through a curve so that short remaining times count for much more, which is a response curve applied to change the <em>shape</em> of a factor's influence, not just its weight.</li>
+  </ul>
+
+  <h2 id="variation">Variation in choice (chapter 16)</h2>
+  <p>The chapter opens with a bank robbery in which all 20 customers gasp, drop and scream in perfect unison, and do exactly the same thing when you come back an hour later. Each reaction was reasonable. All of them choosing it together, every time, is what makes it absurd.</p>
+  <p>Two kinds of variation are needed: between different agents in the same situation, and for one agent across repeated situations. Modelling each character's life history to get it would be impossible, so the book uses the score list you already have plus structured randomness.</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>Method</th><th>How</th><th>Verdict in the book</th></tr>
+    <tr><td><b>Best only</b></td><td>Sort, take the first.</td><td>Predictable. Every agent does the same thing.</td></tr>
+    <tr><td><b>Random from top n</b></td><td>Take the best 25% (a percentage adapts as options come and go), pick one uniformly.</td><td>Better, but treats the 1st and the 8th as equally good even when they are not.</td></tr>
+    <tr><td><b>Weighted random from top n</b></td><td>Same cut-off, but each option's chance is proportional to how good its score is.</td><td>Good. Still needs an arbitrary cut-off.</td></tr>
+    <tr><td><b>Weighted random from all</b></td><td>No cut-off. Bad options get tiny buckets and almost never occur.</td><td>Preferred. No sort needed, no magic number, and one agent in a hundred does something surprising.</td></tr>
+  </table></div>
+  <p>Because the Dudes score is "lower is better", the book turns scores into bucket widths by dividing the total by each score, which also scales the weights automatically:</p>
+  <div class="formula">weight[i] = round( sum of all scores / score[i] ) &nbsp;&nbsp;&nbsp; then build edges and throw a ball, as in Part 3</div>
+
+  <div class="lab">
+    <h4>Run 1,000 agents through the same situation</h4>
+    <p class="hint">Uses whatever is currently in the Dudes simulator above (preset 4 has the most options). Each run sends 1,000 agents and shows what share chose each pair.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Selection method</span><select id="v-mode">
+          <option value="best">Best only</option><option value="top">Random from top n%</option>
+          <option value="wtop">Weighted random from top n%</option><option value="wall" selected>Weighted random from all</option></select></label>
+        <label class="ctl"><span>Top n% <output></output></span><input type="range" id="v-n" min="5" max="100" step="5" value="25" data-suffix=" %"></label>
+        <div class="row"><button class="btn primary" id="v-run" type="button">Run 1,000 agents</button></div>
+        <div class="readout" id="v-read"></div>
+      </div>
+      <div id="v-bars"></div>
+    </div>
+  </div>
+  <div class="note book"><b>Why allow the odd poor choice?</b><p>With the full weighted list, roughly four in five agents pick one of the dozen sensible options and are spread between them. A few pick something mediocre. The book argues this is a feature: a crowd where a couple of individuals behave unexpectedly reads as a crowd of individuals, and a player has to pay attention to which enemy is doing what.</p></div>
+  <div class="note impl"><b>One requirement before you can do this</b><p>Scores must be on a scale where ratios mean something. "Twice the score" has to mean roughly "twice as good". The book's advice is to design the scoring with this in mind from the start ("measure twice, cut once"), which is one more reason to keep everything normalised.</p></div>
+
+  <details><summary>Check yourself</summary>
+    <ol>
+      <li>Why does the book score (enemy, weapon) pairs instead of choosing the enemy first? <em>(The best weapon depends on distance to that specific enemy, so the two choices are not independent.)</em></li>
+      <li>Your agent keeps switching between two cover points. Name two fixes from chapter 15. <em>(A momentum bonus for the current choice, and including travel time already invested.)</em></li>
+      <li>Scores are 10, 20 and 40, lower is better. What are the pick chances under weighted random from all? <em>(Weights 70/10, 70/20, 70/40 = 7, 3.5, 1.75, so about 57%, 29% and 14%.)</em></li>
+    </ol>
+  </details>
+</main>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var B = BM;
+
+  /* ---------- weapons (book table 14) ---------- */
+  var W = [
+    { n: 'Pistol', s: 'Pistol', bd: 10, de: 2.2, dd: 5000, ds: 0, ba: 0.70, ae: 1.5, ad: 3000, as: 0, col: '--c4' },
+    { n: 'Shotgun', s: 'Shotgun', bd: 50, de: 2.1, dd: 100, ds: 0, ba: 0.95, ae: 2.2, ad: 15000, as: 0, col: '--c2' },
+    { n: 'Machine gun', s: 'M/G', bd: 30, de: 2.0, dd: 5000, ds: 0, ba: 0.80, ae: 1.8, ad: 50000, as: 0, col: '--c3' },
+    { n: 'Rocket launcher', s: 'R/L', bd: 100, de: 2.0, dd: 1500, ds: 50, ba: 0.50, ae: 2.0, ad: 30000, as: 50, col: '--c1' }
+  ];
+  function pw(base, exp) { return Math.pow(Math.abs(base), exp); }
+  function acc(w, d, mod) { return Math.max(0, w.ba + (mod || 0) - pw(d - w.as, w.ae) / w.ad); }
+  function dmg(w, d) { return Math.max(0, w.bd - pw(d - w.ds, w.de) / w.dd); }
+  function ttk(health, damage, accuracy) { var dps = accuracy * damage; return dps > 0 ? health / dps : 1000; }
+  function urgency(d) { return Math.max(0, 1 - Math.pow(d, 0.4) / 10); }
+
+  var wcp = new B.Plot('wc-plot', { xmin: 0, xmax: 300, ymin: 0, ymax: 1, xlabel: 'distance (ft)' });
+  var wcMode = 'acc';
+  function drawWeapons() {
+    var ymax = wcMode === 'acc' ? 1 : wcMode === 'dmg' ? 100 : 50;
+    wcp.set({ ymax: ymax, ylabel: wcMode === 'acc' ? 'accuracy' : wcMode === 'dmg' ? 'damage / sec' : 'accuracy x damage' });
+    wcp.draw(W.map(function (w) {
+      return { label: w.n, color: w.col, fn: function (d) { return wcMode === 'acc' ? acc(w, d) : wcMode === 'dmg' ? dmg(w, d) : acc(w, d) * dmg(w, d); } };
+    }));
+  }
+  B.$('wc-modes').addEventListener('click', function (e) {
+    var m = e.target.getAttribute('data-m'); if (!m) return;
+    wcMode = m;
+    this.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b === e.target); });
+    drawWeapons();
+  });
+  B.onRedraw(drawWeapons); drawWeapons();
+
+  /* ---------- dudes ---------- */
+  var TYPES = [{ n: 'Bad', mod: -0.2 }, { n: 'Evil', mod: 0 }, { n: 'Arch', mod: 0.1 }];
+  var PRESETS = {
+    t1: [['Baddie', 0, 2, 50, 150, 100], ['Evilmeister', 1, 2, 75, 150, 100], ['Boss Man', 2, 2, 100, 150, 100]],
+    t2: [['Baddie', 0, 2, 50, 100, 100], ['Evilmeister', 1, 2, 75, 150, 100], ['Boss Man', 2, 2, 100, 150, 100]],
+    t3: [['Baddie', 0, 2, 50, 100, 100], ['Evilmeister', 1, 2, 75, 150, 100], ['Boss Man', 2, 2, 100, 150, 20]],
+    mine: [['Baddie 1', 0, 0, 50, 60, 30], ['Baddie 2', 0, 2, 50, 180, 180], ['Baddie 3', 0, 1, 50, 40, 200], ['Baddie 4', 0, 1, 50, 220, 90],
+      ['Evil Genius', 1, 3, 75, 120, 70], ['Evil Knievel', 1, 2, 75, 200, 22], ['Evilmeister', 1, 2, 75, 150, 140], ['Boss Man', 2, 3, 100, 170, 180]]
+  };
+  var dudes = [], ranked = [];
+  function load(key) { dudes = PRESETS[key].map(function (a) { return { name: a[0], type: a[1], weapon: a[2], hp: a[3], dist: a[4], goal: a[5] }; }); renderInputs(); score(); }
+
+  function opts(list, sel) { return list.map(function (o, i) { return '<option value="' + i + '"' + (i === sel ? ' selected' : '') + '>' + o.n + '</option>'; }).join(''); }
+  function renderInputs() {
+    var h = '<tr><th>Dude</th><th>Type</th><th>His weapon</th><th class="num">Health</th><th class="num">Distance to me</th><th class="num">Distance to detonator</th></tr>';
+    dudes.forEach(function (d, i) {
+      h += '<tr><td>' + d.name + '</td><td><select data-i="' + i + '" data-f="type">' + opts(TYPES, d.type) + '</select></td>' +
+        '<td><select data-i="' + i + '" data-f="weapon">' + opts(W, d.weapon) + '</select></td>' +
+        '<td><input type="number" min="1" max="500" value="' + d.hp + '" data-i="' + i + '" data-f="hp"></td>' +
+        '<td><input type="number" min="0" max="300" value="' + d.dist + '" data-i="' + i + '" data-f="dist"></td>' +
+        '<td><input type="number" min="0" max="1000" value="' + d.goal + '" data-i="' + i + '" data-f="goal"></td></tr>';
+    });
+    B.$('dd-table').innerHTML = h;
+  }
+  B.$('dd-table').addEventListener('change', function (e) {
+    var i = e.target.getAttribute('data-i'), f = e.target.getAttribute('data-f'); if (i === null) return;
+    dudes[+i][f] = parseFloat(e.target.value) || 0; score();
+  });
+  B.$('dd-presets').addEventListener('click', function (e) { var p = e.target.getAttribute('data-p'); if (p) load(p); });
+
+  function score() {
+    var myHp = B.val('dd-hp'), wKill = B.val('dd-w');
+    ranked = [];
+    dudes.forEach(function (d) {
+      W.forEach(function (w, wi) {
+        if (!B.$('dd-a' + wi).checked) return;
+        /* The book's GetDamage() returns a whole number, so damage is truncated here to match its tables. */
+        var tKillEnemy = ttk(d.hp, Math.floor(dmg(w, d.dist)), acc(w, d.dist));
+        var ew = W[d.weapon];
+        var tKillMe = ttk(myHp, Math.floor(dmg(ew, d.dist)), acc(ew, d.dist, TYPES[d.type].mod));
+        var threat = (tKillMe + wKill * tKillEnemy) / (1 + wKill);
+        var urg = urgency(d.goal);
+        ranked.push({ name: d.name, weapon: w.s, tE: tKillEnemy, tM: tKillMe, threat: threat, urg: urg, score: urg > 0 ? threat / urg : 99999 });
+      });
+    });
+    ranked.sort(function (a, b) { return a.score - b.score; });
+    var h = '<tr><th>#</th><th>Target</th><th>Weapon</th><th class="num">Kill him (s)</th><th class="num">He kills me (s)</th><th class="num">Threat</th><th class="num">Urgency</th><th class="num">Score</th></tr>';
+    ranked.forEach(function (r, i) {
+      h += '<tr' + (i === 0 ? ' class="best"' : '') + '><td>' + (i + 1) + '</td><td>' + r.name + '</td><td>' + r.weapon + '</td><td class="num">' + B.fmt(r.tE, 1) +
+        '</td><td class="num">' + B.fmt(r.tM, 1) + '</td><td class="num">' + B.fmt(r.threat, 1) + '</td><td class="num">' + B.fmt(r.urg, 3) + '</td><td class="num">' + B.fmt(r.score, 1) + '</td></tr>';
+    });
+    B.$('dd-out').innerHTML = h;
+    B.$('dd-verdict').textContent = ranked.length ? 'Attack ' + ranked[0].name + ' with the ' + ranked[0].weapon + ' (score ' + B.fmt(ranked[0].score, 1) + ')' : 'No weapon available';
+  }
+  B.wire(['dd-hp', 'dd-w', 'dd-a0', 'dd-a1', 'dd-a2', 'dd-a3'], function () { if (dudes.length) score(); });
+  load('t1');
+
+  /* ---------- selection variation ---------- */
+  function runVariation() {
+    if (!ranked.length) return;
+    var mode = B.$('v-mode').value, pct = B.val('v-n') / 100, N = 1000;
+    var pool = ranked.slice();
+    if (mode === 'top' || mode === 'wtop') pool = pool.slice(0, Math.max(1, Math.round(pool.length * pct)));
+    var total = pool.reduce(function (a, r) { return a + r.score; }, 0);
+    var weights = pool.map(function (r) { return Math.round(total / r.score); });
+    var counts = new Array(ranked.length).fill(0);
+    for (var i = 0; i < N; i++) {
+      var k = mode === 'best' ? 0 : mode === 'top' ? Math.floor(Math.random() * pool.length) : B.weightedPick(weights);
+      counts[k]++;
+    }
+    var shown = ranked.slice(0, 14).map(function (r, i) { return { label: (i + 1) + '. ' + r.name + ' / ' + r.weapon, value: counts[i] / N * 100, text: B.fmt(counts[i] / N * 100, 1) + '%', dim: counts[i] === 0 }; });
+    B.bars('v-bars', shown, { max: Math.max(10, Math.max.apply(null, shown.map(function (s) { return s.value; }))) });
+    var distinct = counts.filter(function (c) { return c > 0; }).length;
+    var rest = counts.slice(14).reduce(function (a, b) { return a + b; }, 0);
+    B.$('v-read').innerHTML = '<b>' + distinct + '</b> different choices made by 1,000 agents.' +
+      (ranked.length > 14 ? '<br>' + B.fmt(rest / N * 100, 1) + '% chose something ranked 15th or lower.' : '') +
+      (mode === 'wtop' || mode === 'wall' ? '<br>weight = total / score, best option weight = ' + weights[0] : '');
+  }
+  B.$('v-run').addEventListener('click', runVariation);
+  B.wire(['v-mode', 'v-n'], runVariation);
+
+  /* ---------- strobing ---------- */
+  var sp = new B.Plot('s-plot', { xmin: 0, xmax: 200, ymin: 0, ymax: 1, xlabel: 'time (ticks)', ylabel: 'utility', pad: [14, 14, 44, 44] });
+  var noiseA = [], noiseB = [], phase = 0;
+  function newNoise() {
+    noiseA = []; noiseB = []; phase = Math.random() * 6;
+    for (var i = 0; i <= 200; i++) { noiseA.push(Math.random() - 0.5); noiseB.push(Math.random() - 0.5); }
+    for (var s = 0; s < 2; s++) for (var j = 1; j < 200; j++) { noiseA[j] = (noiseA[j - 1] + noiseA[j] + noiseA[j + 1]) / 3; noiseB[j] = (noiseB[j - 1] + noiseB[j] + noiseB[j + 1]) / 3; }
+  }
+  function drawStrobe() {
+    var mom = B.val('s-mom'), noise = B.val('s-noise') * 6, every = B.val('s-every');
+    var a = [], b = [], choice = [], cur = 0, switches = 0;
+    for (var t = 0; t <= 200; t++) {
+      var ua = B.clamp(0.55 + 0.12 * Math.sin(t / 34 + phase) + noiseA[t] * noise, 0, 1);
+      var ub = B.clamp(0.55 + 0.12 * Math.sin(t / 34 + phase + 2.4) + noiseB[t] * noise, 0, 1);
+      a.push([t, ua]); b.push([t, ub]);
+      if (t % every === 0) {
+        var sa = ua + (cur === 0 ? mom : 0), sb = ub + (cur === 1 ? mom : 0);
+        var pick = sa >= sb ? 0 : 1;
+        if (t > 0 && pick !== cur) switches++;
+        cur = pick;
+      }
+      choice.push(cur);
+    }
+    var series = [{ points: a, color: '--c1', label: 'target A' }, { points: b, color: '--c4', label: 'target B' }];
+    /* choice strip drawn as short thick segments under the axis */
+    var start = 0;
+    for (var i = 1; i <= 201; i++) {
+      if (i === 201 || choice[i] !== choice[start]) {
+        series.push({ points: [[start, -0.115], [i, -0.115]], color: choice[start] === 0 ? '--c1' : '--c4', width: 10 });
+        start = i;
+      }
+    }
+    sp.set({ ymin: -0.16 });
+    sp.draw(series);
+    B.$('s-read').innerHTML = 'Target switches in 200 ticks: <b>' + switches + '</b><br>' +
+      (switches > 15 ? 'Strobing. The agent never commits.' : switches > 4 ? 'Some indecision left.' : 'Committed, and still able to switch when it matters.');
+  }
+  B.$('s-new').addEventListener('click', function () { newNoise(); drawStrobe(); });
+  newNoise();
+  B.wire(['s-mom', 's-noise', 's-every'], drawStrobe);
+})();
+</script>
+</body>
+</html>

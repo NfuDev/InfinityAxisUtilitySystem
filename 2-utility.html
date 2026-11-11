@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Part 2: Utility</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+  <p class="kicker">Part 2 &middot; Chapters 7 to 9</p>
+  <h1>Utility: how much something matters</h1>
+  <p class="lead">Utility is the single number that says how much an agent wants an outcome. Three chapters cover three questions: how to score an uncertain outcome, how that score changes as you get more of something, and how to compare things that have nothing in common.</p>
+
+  <h2 id="value">Value is not utility</h2>
+  <p><b>Value</b> is what you can measure: 20 dollars, 40 health points, 3 seconds. <b>Utility</b> is what that amount is worth to this agent in this situation. Twenty dollars is the same value to a student and a millionaire and very different utility.</p>
+  <p>Most beginner AI bugs come from using value where utility was meant. "Go for the biggest health pack" uses value. "Go for the health pack that helps me most, given how hurt I am and how far it is" uses utility.</p>
+
+  <h2 id="risk">Decisions under risk: expected utility</h2>
+  <p>When outcomes are uncertain, multiply each outcome's utility by its probability and add them up. Then pick the action with the best total.</p>
+  <div class="formula">E(action) = &Sigma; probability(outcome) &times; utility(outcome)</div>
+
+  <div class="note book"><b>From the book: the computer warranty</b>
+    <p>A computer costs $1,400. A one-year warranty costs $300. There is a 20% chance of needing a $200 repair and a 10% chance of total failure. Without the warranty you expect to lose 0.20 &times; 200 + 0.10 &times; 1,400 = $180. With it you lose $300 for certain. So skip it. Halve the warranty price to $150 and the answer flips.</p></div>
+
+  <div class="lab">
+    <h4>Warranty calculator</h4>
+    <p class="hint">Starts on the book's numbers. Find the warranty price where the decision changes.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Warranty price <output></output></span><input type="range" id="w-x" min="0" max="500" step="10" value="300" data-suffix=" $"></label>
+        <label class="ctl"><span>Chance of a repair <output></output></span><input type="range" id="w-b" min="0" max="60" value="20" data-suffix=" %"></label>
+        <label class="ctl"><span>Chance of total failure <output></output></span><input type="range" id="w-f" min="0" max="40" value="10" data-suffix=" %"></label>
+        <label class="ctl"><span>How bad is being without a computer? <output></output></span><input type="range" id="w-pain" min="0" max="1500" step="50" value="0" data-suffix=" $"></label>
+      </div>
+      <div>
+        <div id="w-bars"></div>
+        <div class="readout" id="w-read"></div>
+        <div class="verdict" id="w-verdict"></div>
+      </div>
+    </div>
+  </div>
+  <p>The last slider is the book's point about <em>relative utility</em>. If a broken computer stops your income, the downtime has a cost the price tag does not show. Add that cost and the "irrational" warranty becomes the rational choice for you. Two agents with the same numbers and different personal utilities should decide differently.</p>
+
+  <h3>The same maths in a game: protecting the barracks</h3>
+  <p>The book reuses the warranty as a strategy-game decision. A barracks costs 500. A guard tower costs 150 and reduces damage if an attack comes. Is the tower worth it?</p>
+  <div class="lab">
+    <h4>Build the tower?</h4>
+    <p class="hint">Costs follow the book's listing (tower 150, small repair 100 with a tower and 250 without, large repair 250 with a tower; I assume a large attack on an unguarded barracks destroys it, 500).</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Chance of a small attack <output></output></span><input type="range" id="t-s" min="0" max="100" value="50" data-suffix=" %"></label>
+        <label class="ctl"><span>Chance of a large attack <output></output></span><input type="range" id="t-l" min="0" max="100" value="20" data-suffix=" %"></label>
+        <label class="ctl"><span>A tower scares off small attacks by <output></output></span><input type="range" id="t-deter" min="0" max="100" value="0" data-suffix=" %"></label>
+      </div>
+      <div>
+        <div id="t-bars"></div>
+        <div class="readout" id="t-read"></div>
+        <div class="verdict" id="t-verdict"></div>
+      </div>
+    </div>
+  </div>
+  <div class="note book"><b>"When changing changes the changers"</b><p>The third slider is the book's twist. Building the tower does not just reduce damage. It changes the enemy's behaviour, so the probabilities you started with are no longer true. Your own action is an input to the other side's decision.</p></div>
+
+  <h3>Risk attitude</h3>
+  <p>Expected <em>value</em> treats a sure 50 and a coin flip for 100 as equal. People do not. The curve that maps money to utility bends, and the direction of the bend is the agent's personality.</p>
+  <div class="lab">
+    <h4>A sure thing against a gamble</h4>
+    <p class="hint">Offer: take a guaranteed amount, or flip a coin for 100 or nothing.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Guaranteed amount <output></output></span><input type="range" id="r-sure" min="0" max="100" value="40"></label>
+        <label class="ctl"><span>Curve exponent (below 1 cautious, above 1 reckless) <output></output></span><input type="range" id="r-a" min="0.3" max="2.5" step="0.05" value="0.5"></label>
+        <div class="readout" id="r-read"></div>
+        <div class="verdict" id="r-verdict"></div>
+      </div>
+      <div><canvas class="plot" id="r-plot"></canvas></div>
+    </div>
+  </div>
+  <div class="note impl"><b>Use it</b><p>One exponent per character gives you cautious and reckless variants of the same AI for free. A cautious enemy holds cover that is "good enough". A reckless one leaves it for a small chance at a big payoff.</p></div>
+
+  <h2 id="time">The utility of time</h2>
+  <p>Time is a cost attached to everything. The book covers three forms of it: how much you can produce in a given time ("Settlers and Warriors"), how far away a goal is, and how the value of a goal decays while you travel to it.</p>
+  <div class="formula">value of doing A then B = Va &times; (1 &minus; r &times; Ta) + Vb &times; (1 &minus; r &times; (Ta + Tab))</div>
+  <p>Here <code>r</code> is how fast the goals lose value per second, <code>Ta</code> the time to reach A, and <code>Tab</code> the time from A to B. Compute it for both orders and take the larger.</p>
+
+  <div class="note book"><b>From the book: "Taking Fire"</b><p>You are wounded behind cover. Armor is on one side and a health kit on the other. Armor reduces the damage you take while running. Which do you grab first?</p></div>
+  <div class="lab">
+    <h4>Armor first or health kit first?</h4>
+    <p class="hint">Distances are in seconds of running. Damage is per second. The scenario is the book's; the default numbers are mine.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Cover to armor <output></output></span><input type="range" id="f-ta" min="1" max="15" value="5" data-suffix=" s"></label>
+        <label class="ctl"><span>Cover to health kit <output></output></span><input type="range" id="f-tk" min="1" max="15" value="10" data-suffix=" s"></label>
+        <label class="ctl"><span>Armor to health kit <output></output></span><input type="range" id="f-tak" min="1" max="20" value="12" data-suffix=" s"></label>
+        <label class="ctl"><span>Damage per second, no armor <output></output></span><input type="range" id="f-r0" min="0.5" max="5" step="0.1" value="2"></label>
+        <label class="ctl"><span>Damage per second, with armor <output></output></span><input type="range" id="f-r1" min="0" max="3" step="0.1" value="0.8"></label>
+        <label class="ctl"><span>Health kit heals <output></output></span><input type="range" id="f-h" min="10" max="100" value="60"></label>
+        <label class="ctl"><span>Kit loses value per second (someone may take it) <output></output></span><input type="range" id="f-d" min="0" max="8" step="0.25" value="0" data-suffix=" %"></label>
+      </div>
+      <div>
+        <div id="f-bars"></div>
+        <div class="readout" id="f-read"></div>
+        <div class="verdict" id="f-verdict"></div>
+      </div>
+    </div>
+  </div>
+  <p>With no decay, armor first always wins on damage taken: the long run is done while protected. Add decay to the kit (the book's "one more factor couldn't hurt") and at some point the order reverses. A decision that looked proven changes when one more relevant factor is included.</p>
+
+  <h2 id="marginal">Marginal utility</h2>
+  <p>Marginal utility is the worth of the <em>next</em> unit. It is rarely constant.</p>
+  <ul>
+    <li><b>Decreasing.</b> The first soldier guarding a base matters enormously. The twentieth barely changes anything. The book's "Building Soldiers" example uses this to stop an AI from building one unit type forever.</li>
+    <li><b>Increasing.</b> A health kit is worth little at 90% health and everything at 5%. The book's "Declining Health" example: urgency rises faster and faster as health falls.</li>
+  </ul>
+  <div class="lab">
+    <h4>Shape of the next unit's worth</h4>
+    <p class="hint">Switch between the two cases and change the exponent. The dashed line is a threshold: act when the curve crosses it.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Case</span><select id="m-case"><option value="dec">Decreasing: the next soldier</option><option value="inc">Increasing: need for a health kit</option></select></label>
+        <label class="ctl"><span>Exponent <output></output></span><input type="range" id="m-k" min="0.3" max="6" step="0.1" value="2"></label>
+        <label class="ctl"><span><span id="m-xl">Soldiers built, of 20 wanted</span> <output></output></span><input type="range" id="m-x" min="0" max="20" value="6"></label>
+        <label class="ctl"><span>Act when utility is above <output></output></span><input type="range" id="m-th" min="0" max="1" step="0.05" value="0.5"></label>
+        <div class="readout" id="m-read"></div>
+      </div>
+      <div><canvas class="plot" id="m-plot"></canvas></div>
+    </div>
+  </div>
+  <div class="note book"><b>"Increasing is not always the inverse of decreasing"</b><p>The book warns against flipping a curve and assuming it means the same thing. A curve that is flat while health is high and steep when it is low says "ignore this until it is critical". Its mirror image says "care a lot early, then stop caring". Draw the curve for the behaviour you want, do not derive it by reflection.</p></div>
+
+  <h3>Risk against reward: the St. Petersburg lottery</h3>
+  <p>A coin is flipped until it lands tails, and the prize doubles with every head. The expected <em>value</em> of that game is infinite, yet nobody would pay much to play. The book resolves it with two marginal utility curves moving in opposite directions: each extra dollar you might win is worth less than the one before, while each extra dollar you stake hurts more. You stop where the gap between them is largest.</p>
+  <p>That picture, a rising cost curve against a flattening benefit curve, is the general model for any "how much is enough" decision: how many troops to send, how long to keep searching, how much ammo to carry.</p>
+
+  <h3>Multiple thresholds</h3>
+  <p>One curve can drive several behaviours. As health falls an agent might first prefer cover (below 0.6), then actively look for a kit (below 0.35), then drop everything and flee (below 0.15). The curve stays the same; you place several trigger lines on it.</p>
+
+  <h2 id="relative">Relative utility: comparing unlike things</h2>
+  <p>Chapter 9 faces the hard problem. How do you compare the utility of killing an enemy with the utility of staying alive, or of saving time? There is no natural common unit.</p>
+  <ul>
+    <li><b>Hedonic calculus.</b> Bentham's old idea: score pleasures and pains on several dimensions (intensity, duration, certainty, nearness) and add them. It is the ancestor of every scoring AI.</li>
+    <li><b>Multi-attribute utility theory (MAUT).</b> Break a choice into attributes, score each on its own scale, weight the attributes, combine. The book revisits the fight-or-flee decision this way. Part 4 turns it into a method.</li>
+  </ul>
+  <h3>Why people's comparisons are inconsistent</h3>
+  <ul>
+    <li><b>Perception.</b> The same change feels different depending on the starting point. Going from 5 to 10 enemies feels worse than from 50 to 55.</li>
+    <li><b>Categorisation.</b> People put things into rough bins ("safe", "risky") and stop distinguishing inside a bin.</li>
+    <li><b>Framing.</b> "Save 200 of 600" and "lose 400 of 600" describe the same outcome and get different choices.</li>
+  </ul>
+  <p>The book's examples here ("Wizardry and Wands", "Hippocratic Morals") show apparent contradictions, such as a healer who treats a lightly wounded friend before a badly wounded stranger. They stop being contradictions once you admit there was another factor being weighed, such as loyalty.</p>
+  <div class="note impl"><b>The practical rule that comes out of chapter 9</b>
+    <p>If two agents with the same inputs should act differently, do not add special cases. Add a factor (loyalty, greed, fear) and give each agent a different weight for it. Personality is a set of weights.</p></div>
+
+  <details><summary>Check yourself</summary>
+    <ol>
+      <li>An agent has 3 potions and uses one whenever health is below 50%. What is missing? <em>(Marginal utility: the last potion is worth far more than the first, so the trigger should tighten as the stock falls.)</em></li>
+      <li>Why can the tower be worth building even when its expected cost is higher? <em>(It changes the enemy's attack probabilities, and the agent may put extra personal weight on avoiding the worst outcome.)</em></li>
+      <li>What two numbers do you need to choose the order of two goals? <em>(Travel times, and how fast each goal's value decays.)</em></li>
+    </ol>
+  </details>
+</main>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var B = BM;
+  function verdict(id, text, bad) { var v = B.$(id); v.textContent = text; v.className = 'verdict' + (bad ? ' bad' : ''); }
+
+  /* warranty */
+  B.wire(['w-x', 'w-b', 'w-f', 'w-pain'], function () {
+    var x = B.val('w-x'), b = B.val('w-b') / 100, f = B.val('w-f') / 100, pain = B.val('w-pain');
+    var withW = x, without = b * 200 + f * 1400 + (b + f) * pain;
+    B.bars('w-bars', [{ label: 'Expected loss with warranty', value: withW }, { label: 'Expected loss without', value: without }], { best: 'min', digits: 0, max: Math.max(withW, without, 1) });
+    B.$('w-read').innerHTML = 'without = ' + B.fmt(b, 2) + ' &times; 200 + ' + B.fmt(f, 2) + ' &times; 1400' +
+      (pain ? ' + ' + B.fmt(b + f, 2) + ' &times; ' + pain : '') + ' = <b>' + B.fmt(without, 0) + '</b><br>with = <b>' + x + '</b>';
+    verdict('w-verdict', withW < without ? 'Buy the warranty' : 'Skip the warranty', withW >= without);
+  });
+
+  /* tower */
+  B.wire(['t-s', 't-l', 't-deter'], function () {
+    var ps = B.val('t-s') / 100, pl = B.val('t-l') / 100, det = B.val('t-deter') / 100;
+    if (ps + pl > 1) { var sc = 1 / (ps + pl); ps *= sc; pl *= sc; }
+    var psT = ps * (1 - det);
+    var noTower = ps * 250 + pl * 500, tower = 150 + psT * 100 + pl * 250;
+    B.bars('t-bars', [{ label: 'Expected cost with tower', value: tower }, { label: 'Expected cost without', value: noTower }], { best: 'min', digits: 0, max: Math.max(tower, noTower, 1) });
+    B.$('t-read').innerHTML = 'without = ' + B.fmt(ps, 2) + ' &times; 250 + ' + B.fmt(pl, 2) + ' &times; 500 = <b>' + B.fmt(noTower, 0) +
+      '</b><br>with = 150 + ' + B.fmt(psT, 2) + ' &times; 100 + ' + B.fmt(pl, 2) + ' &times; 250 = <b>' + B.fmt(tower, 0) + '</b>';
+    verdict('t-verdict', tower < noTower ? 'Build the tower' : 'Do not build the tower', tower >= noTower);
+  });
+
+  /* risk attitude */
+  var rp = new B.Plot('r-plot', { xmin: 0, xmax: 100, ymin: 0, ymax: 1, xlabel: 'amount', ylabel: 'utility' });
+  B.wire(['r-sure', 'r-a'], function () {
+    var sure = B.val('r-sure'), a = B.val('r-a');
+    var u = function (x) { return Math.pow(x / 100, a); };
+    var uSure = u(sure), uGamble = 0.5 * u(100) + 0.5 * u(0);
+    var ce = 100 * Math.pow(uGamble, 1 / a);
+    rp.draw([{ fn: u, color: '--c1', label: 'utility of money' }],
+      [{ x: sure, y: uSure, color: '--c2', vline: true }, { y: uGamble, hline: true, color: '--c4', noDot: true }]);
+    B.$('r-read').innerHTML = 'utility(sure ' + sure + ') = <b>' + B.fmt(uSure, 2) + '</b><br>utility(gamble) = 0.5 &times; u(100) + 0.5 &times; u(0) = <b>' +
+      B.fmt(uGamble, 2) + '</b><br>This agent values the coin flip the same as a sure <b>' + B.fmt(ce, 0) + '</b>.';
+    verdict('r-verdict', uSure >= uGamble ? 'Takes the sure thing' : 'Takes the gamble', uSure < uGamble);
+  });
+
+  /* taking fire */
+  B.wire(['f-ta', 'f-tk', 'f-tak', 'f-r0', 'f-r1', 'f-h', 'f-d'], function () {
+    var ta = B.val('f-ta'), tk = B.val('f-tk'), tak = B.val('f-tak'), r0 = B.val('f-r0'), r1 = B.val('f-r1'), h = B.val('f-h'), d = B.val('f-d') / 100;
+    var dmgA = ta * r0 + tak * r1 + tk * r1, healA = h * Math.max(0, 1 - d * (ta + tak));
+    var dmgK = tk * r0 + tak * r0 + ta * r1, healK = h * Math.max(0, 1 - d * tk);
+    var netA = healA - dmgA, netK = healK - dmgK;
+    var lo = Math.min(netA, netK, 0);
+    B.bars('f-bars', [
+      { label: 'Armor first: net health', value: netA - lo, text: B.fmt(netA, 1) },
+      { label: 'Kit first: net health', value: netK - lo, text: B.fmt(netK, 1) }], { best: 'max' });
+    B.$('f-read').innerHTML = 'Armor first: damage <b>' + B.fmt(dmgA, 1) + '</b>, kit heals <b>' + B.fmt(healA, 1) + '</b><br>Kit first: damage <b>' +
+      B.fmt(dmgK, 1) + '</b>, kit heals <b>' + B.fmt(healK, 1) + '</b>';
+    verdict('f-verdict', netA >= netK ? 'Go for the armor first' : 'Go for the health kit first', netA < netK);
+  });
+
+  /* marginal utility */
+  var mp = new B.Plot('m-plot', { xmin: 0, xmax: 20, ymin: 0, ymax: 1, ylabel: 'utility of the next one' });
+  B.wire(['m-case', 'm-k', 'm-x', 'm-th'], function () {
+    var kase = B.$('m-case').value, k = B.val('m-k'), x = B.val('m-x'), th = B.val('m-th');
+    var fn, xl, desc;
+    if (kase === 'dec') {
+      fn = function (n) { return 1 - Math.pow(n / 20, 1 / k); };
+      xl = 'Soldiers built, of 20 wanted'; mp.set({ xlabel: 'soldiers already built' });
+      desc = 'utility = 1 &minus; (built / 20)^(1 / ' + B.fmt(k, 1) + ')';
+    } else {
+      fn = function (n) { return Math.pow(1 - n / 20, k); };
+      xl = 'Health remaining, out of 20'; mp.set({ xlabel: 'health remaining' });
+      desc = 'utility = (1 &minus; health / 20)^' + B.fmt(k, 1);
+    }
+    B.$('m-xl').textContent = xl;
+    var y = fn(x);
+    mp.draw([{ fn: fn, color: '--c1' }], [{ x: x, y: y, color: '--c2', vline: true }, { y: th, hline: true, color: '--c4', noDot: true }]);
+    B.$('m-read').innerHTML = desc + '<br>at ' + x + ': <b>' + B.fmt(y, 2) + '</b> &rarr; ' +
+      (y >= th ? '<b>act</b> (' + (kase === 'dec' ? 'build another soldier' : 'go and get the kit') + ')' : 'do something else');
+  });
+})();
+</script>
+</body>
+</html>

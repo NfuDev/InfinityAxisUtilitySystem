@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Part 3: Functions and response curves</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+  <p class="kicker">Part 3 &middot; Chapters 10 to 12</p>
+  <h1>Functions and response curves</h1>
+  <p class="lead">This is the toolbox. A response curve answers one question: given this input, how strongly should the agent care? Learn four curve shapes and one data structure and you can express almost any behaviour in the book.</p>
+
+  <h2 id="functions">The four curve families</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Family</th><th>Book form</th><th>Reach for it when</th></tr>
+    <tr><td><b>Linear</b></td><td><code>y = m&middot;x + b</code></td><td>Each unit matters the same. Rare in behaviour, common as a first draft.</td></tr>
+    <tr><td><b>Polynomial</b> (the book calls the whole family "quadratic")</td><td><code>y = (x &minus; c)^k + b</code></td><td>Things that speed up or slow down: urgency that rises as health falls, damage that drops with distance.</td></tr>
+    <tr><td><b>Logistic</b> (S-curve)</td><td><code>y = 1 / (1 + e^&minus;x)</code></td><td>Soft thresholds. "Does not matter, does not matter, suddenly matters, then levels off."</td></tr>
+    <tr><td><b>Logit</b> (sideways S)</td><td><code>y = ln(x / (1 &minus; x))</code></td><td>The reverse: quick change at both ends and a flat middle. "Only the extremes are interesting."</td></tr>
+  </table></div>
+  <p>Chapter 10 then shows how four parameters reshape any of them. These four letters come back in Part 6, because the Infinite Axis system stores every curve as exactly these.</p>
+  <ul>
+    <li><b>m</b>, slope: steeper or flatter, and negative to flip it.</li>
+    <li><b>k</b>, exponent: how sharply it bends. Between 0 and 1 the bend goes the other way ("rotating the curve").</li>
+    <li><b>b</b>, vertical shift: move the whole curve up or down.</li>
+    <li><b>c</b>, horizontal shift: move the vertex or midpoint left or right.</li>
+  </ul>
+
+  <div class="lab">
+    <h4>Curve explorer</h4>
+    <p class="hint">Input and output are both kept between 0 and 1. Pick a preset to see a behaviour, then change one parameter at a time.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Family</span><select id="c-type"><option value="linear">Linear</option><option value="poly" selected>Polynomial</option><option value="logistic">Logistic</option><option value="logit">Logit</option></select></label>
+        <label class="ctl"><span>m, slope <output></output></span><input type="range" id="c-m" min="-3" max="3" step="0.05" value="1"></label>
+        <label class="ctl"><span>k, exponent <output></output></span><input type="range" id="c-k" min="0.1" max="8" step="0.1" value="2"></label>
+        <label class="ctl"><span>b, vertical shift <output></output></span><input type="range" id="c-b" min="-1" max="1" step="0.05" value="0"></label>
+        <label class="ctl"><span>c, horizontal shift <output></output></span><input type="range" id="c-c" min="-1" max="1" step="0.05" value="0"></label>
+        <label class="ctl"><span>Test input x <output></output></span><input type="range" id="c-x" min="0" max="1" step="0.01" value="0.3"></label>
+        <div class="row" id="c-presets">
+          <button class="btn" type="button" data-p="poly,-1,3,1,0">Want to heal (x = health)</button>
+          <button class="btn" type="button" data-p="logistic,1,1,0,0.5">Soft threshold</button>
+          <button class="btn" type="button" data-p="logistic,-1.5,1,0,0.35">Too far to bother</button>
+          <button class="btn" type="button" data-p="poly,-4,2,1,0.5">Sweet spot in the middle</button>
+          <button class="btn" type="button" data-p="logit,1,1,0,0">Only extremes matter</button>
+        </div>
+      </div>
+      <div>
+        <canvas class="plot tall" id="c-plot"></canvas>
+        <div class="readout" id="c-read"></div>
+      </div>
+    </div>
+  </div>
+  <div class="note impl"><b>How to design a curve</b>
+    <p>Do not start from a formula. Start from three sentences: what happens at input 0, what happens at input 1, and where the change is fastest. Sketch that, then pick the family that draws it. If no family fits, chapter 12's hand-made table is the answer.</p></div>
+
+  <div class="note book"><b>The book's weapon formulas use this directly</b>
+    <p>In the big example of Part 5, every weapon's accuracy and damage is one shifted polynomial:</p>
+    <div class="formula">result = Base + Modifier &minus; (Distance &minus; Shift)^Exponent / Divisor</div>
+    <p>Four numbers per weapon produce a pistol that fades gently, a shotgun that falls off a cliff, and a rocket launcher that is <em>worse</em> up close because <code>Shift</code> moves the peak out to 50 feet.</p></div>
+
+  <h2 id="distributions">Probability distributions</h2>
+  <p>Chapter 11 is about populations. Not every guard has the same reaction time, and one guard does not react identically twice. A distribution describes that spread.</p>
+  <ul>
+    <li><b>Uniform.</b> Every value equally likely. This is plain <code>rand()</code>, and it looks artificial because almost nothing in life is uniform.</li>
+    <li><b>Normal (bell).</b> Most values near the middle, few at the extremes. The book's simple recipe: add several uniform random numbers together. Three dice already give a convincing bell.</li>
+    <li><b>Triangular.</b> A cheap approximation of the bell from just two random numbers.</li>
+    <li><b>Uneven, parabolic, Poisson.</b> Skewed shapes for things like "usually quick, occasionally very slow".</li>
+  </ul>
+  <div class="lab">
+    <h4>Adding dice makes a bell</h4>
+    <p class="hint">Each sample is the average of N uniform random numbers. One die is flat. Watch what a second and third one do.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Random numbers averaged per sample <output></output></span><input type="range" id="d-n" min="1" max="8" value="1"></label>
+        <label class="ctl"><span>Skew (raise the result to this power) <output></output></span><input type="range" id="d-skew" min="0.3" max="3" step="0.1" value="1"></label>
+        <div class="row"><button class="btn primary" id="d-run" type="button">Draw 5,000 samples</button></div>
+        <div class="readout" id="d-read"></div>
+      </div>
+      <div><canvas class="plot" id="d-plot"></canvas></div>
+    </div>
+  </div>
+  <div class="note impl"><b>Where this goes in an agent</b>
+    <p>Use it for per-agent traits rolled once at spawn (aim skill, bravery, reaction delay) and for small per-decision noise. Twenty enemies with bravery drawn from a bell around 0.5 will break and run at twenty different moments from the same code.</p></div>
+
+  <h2 id="response">Response curves as data: buckets</h2>
+  <p>A formula has two limits: you are stuck with shapes maths can draw, and evaluating it costs time. Chapter 12's answer is to store the curve as a table. The same structure also gives weighted random selection, which Part 5 depends on.</p>
+  <p>Picture each option as a bucket whose width is its weight. Lay the buckets end to end. Throw a ball at a random point along the row. Wider buckets catch it more often.</p>
+  <div class="formula">edge[i] = edge[i&minus;1] + width[i] &nbsp;&nbsp;&nbsp; roll = random(0, edge[last]) &nbsp;&nbsp;&nbsp; result = first i where roll &lt;= edge[i]</div>
+
+  <div class="note book"><b>From the book</b><p>The first bucket set models the crowd from the two-thirds game in Part 1: 5 wide for "guess 33", 3 for "guess 22", 30 for random guessers, 62 for semi-logical ones. The code is <code>AddBucket(GUESS_33, 5); AddBucket(GUESS_22, 3); AddBucket(GUESS_RANDOM, 30); AddBucket(GUESS_SEMI, 62);</code></p></div>
+
+  <div class="lab">
+    <h4>Bucket lookup</h4>
+    <p class="hint">Change the widths, then throw balls. The search steps show the binary search the book uses to find the bucket quickly.</p>
+    <div class="grid2">
+      <div>
+        <div class="tbl-wrap"><table id="k-table">
+          <tr><th>Bucket</th><th class="num">Width</th><th class="num">Edge</th><th class="num">Share</th><th class="num">Hits</th></tr>
+        </table></div>
+        <div class="row">
+          <button class="btn primary" id="k-one" type="button">Throw 1</button>
+          <button class="btn" id="k-many" type="button">Throw 1,000</button>
+          <button class="btn" id="k-reset" type="button">Reset hits</button>
+        </div>
+      </div>
+      <div>
+        <canvas class="plot" id="k-plot" style="height:120px"></canvas>
+        <div class="readout" id="k-read">Throw a ball.</div>
+      </div>
+    </div>
+  </div>
+<pre><code>// The structure from chapter 12, reduced to its core.
+struct Bucket { int width; int edge; Result result; };
+std::vector&lt;Bucket&gt; buckets;
+
+void AddBucket(Result r, int width) {
+    int prev = buckets.empty() ? 0 : buckets.back().edge;
+    buckets.push_back({ width, prev + width, r });
+}
+
+Result Pick() {
+    int roll = 1 + rand() % buckets.back().edge;      // 1 .. total width
+    int lo = 0, hi = (int)buckets.size() - 1;
+    while (lo &lt; hi) {                                 // binary search on the edges
+        int mid = (lo + hi) / 2;
+        if (roll &lt;= buckets[mid].edge) hi = mid; else lo = mid + 1;
+    }
+    return buckets[lo].result;
+}</code></pre>
+
+  <h3>Four things the book builds from this one structure</h3>
+  <ol>
+    <li><b>A function stored as a table.</b> Evaluate an expensive curve once into an array and look values up at run time. Index by a scaled x, or binary search if x is not evenly spaced.</li>
+    <li><b>A distribution stored as buckets.</b> Any histogram becomes a random generator: bucket width is how often that result should occur.</li>
+    <li><b>Hand-made curves.</b> When no formula fits, a designer types the numbers into a file. The book stresses that this is not cheating. It is often the fastest way to the behaviour you want.</li>
+    <li><b>Dynamic curves.</b> Change a bucket's width while the game runs and rebuild the edges from that bucket onward. An agent that was burned by one tactic can shrink that tactic's bucket.</li>
+  </ol>
+
+  <div class="lab">
+    <h4>How many table entries are enough?</h4>
+    <p class="hint">The smooth line is the formula. The stepped line is what a lookup table of that size returns. This is the book's "granularity" question from Part 4, seen early.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Table entries <output></output></span><input type="range" id="l-n" min="2" max="64" value="8"></label>
+        <label class="ctl"><span>Interpolate between entries</span><select id="l-lerp"><option value="0">No, use the nearest lower entry</option><option value="1">Yes, linear interpolation</option></select></label>
+        <div class="readout" id="l-read"></div>
+      </div>
+      <div><canvas class="plot" id="l-plot"></canvas></div>
+    </div>
+  </div>
+
+  <details><summary>Check yourself</summary>
+    <ol>
+      <li>You want "interest in a pickup" to be near zero until the agent is fairly close, then rise fast, then level off. Which family? <em>(Logistic, with the slope negative on distance or the input inverted.)</em></li>
+      <li>Three options have weights 6, 3 and 1. What are the edges, and how often is the second picked? <em>(6, 9, 10. Thirty percent of the time.)</em></li>
+      <li>Why store bucket edges as cumulative sums instead of widths? <em>(So one random number and one search find the result, without summing every time.)</em></li>
+    </ol>
+  </details>
+</main>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var B = BM;
+
+  /* ---- curve explorer ---- */
+  var cp = new B.Plot('c-plot', { xmin: 0, xmax: 1, ymin: 0, ymax: 1, xlabel: 'input', ylabel: 'output' });
+  function params() { return { m: B.val('c-m'), k: B.val('c-k'), b: B.val('c-b'), c: B.val('c-c') }; }
+  function drawCurve() {
+    var type = B.$('c-type').value, p = params(), x = B.val('c-x');
+    var fn = function (v) { return B.Curves.eval(type, v, p); };
+    cp.draw([{ fn: fn, color: '--c1' }], [{ x: x, y: fn(x), color: '--c2', vline: true }]);
+    B.$('c-read').innerHTML = B.Curves.text(type, p) + '<br>then clamp to 0..1<br>f(' + B.fmt(x, 2) + ') = <b>' + B.fmt(fn(x), 3) + '</b>';
+  }
+  B.wire(['c-type', 'c-m', 'c-k', 'c-b', 'c-c', 'c-x'], drawCurve);
+  B.$('c-presets').addEventListener('click', function (e) {
+    var d = e.target.getAttribute('data-p'); if (!d) return;
+    var a = d.split(',');
+    B.$('c-type').value = a[0]; B.$('c-m').value = a[1]; B.$('c-k').value = a[2]; B.$('c-b').value = a[3]; B.$('c-c').value = a[4];
+    B.$('c-m').dispatchEvent(new Event('input'));
+    ['c-k', 'c-b', 'c-c'].forEach(function (id) { B.$(id).dispatchEvent(new Event('input')); });
+  });
+
+  /* ---- distributions ---- */
+  var dp = new B.Plot('d-plot', { xmin: 0, xmax: 1, ymin: 0, ymax: 1, xlabel: 'sample value', ylabel: 'how often (scaled)' });
+  function runDist() {
+    var n = B.val('d-n'), skew = B.val('d-skew'), bins = 40, h = new Array(bins).fill(0), sum = 0, N = 5000;
+    for (var i = 0; i < N; i++) {
+      var s = 0; for (var j = 0; j < n; j++) s += Math.random();
+      var v = Math.pow(s / n, skew); sum += v;
+      h[Math.min(bins - 1, Math.floor(v * bins))]++;
+    }
+    var max = Math.max.apply(null, h), pts = [];
+    for (var k = 0; k < bins; k++) { pts.push([k / bins, h[k] / max]); pts.push([(k + 1) / bins, h[k] / max]); }
+    dp.draw([{ points: pts, color: '--c4', width: 1.8 }], [{ x: sum / N, vline: true, color: '--c1', noDot: true }]);
+    B.$('d-read').innerHTML = 'mean = <b>' + B.fmt(sum / N, 3) + '</b><br>' +
+      (n === 1 ? 'One number: flat. Every value is equally likely.' : n === 2 ? 'Two numbers: a triangle.' : n + ' numbers: close to a bell curve.');
+  }
+  B.$('d-run').addEventListener('click', runDist);
+  B.wire(['d-n', 'd-skew'], runDist);
+
+  /* ---- buckets ---- */
+  var names = ['Guess 33', 'Guess 22', 'Random', 'Semi-logical'], widths = [5, 3, 30, 62], hits = [0, 0, 0, 0], lastRoll = null;
+  var colors = ['--c1', '--c2', '--c3', '--c4'];
+  var kp = new B.Plot('k-plot', { xmin: 0, xmax: 100, ymin: 0, ymax: 1, pad: [8, 10, 26, 10] });
+  function edges() { var e = [], acc = 0; widths.forEach(function (w) { acc += w; e.push(acc); }); return e; }
+  function renderBuckets() {
+    var e = edges(), total = e[e.length - 1] || 1, tot = hits.reduce(function (a, b) { return a + b; }, 0);
+    var t = B.$('k-table');
+    while (t.rows.length > 1) t.deleteRow(1);
+    names.forEach(function (nm, i) {
+      var r = t.insertRow();
+      r.innerHTML = '<td>' + nm + '</td><td class="num"><input type="number" min="0" max="200" value="' + widths[i] + '" data-i="' + i + '"></td>' +
+        '<td class="num">' + e[i] + '</td><td class="num">' + B.fmt(widths[i] / total * 100, 1) + '%</td>' +
+        '<td class="num">' + hits[i] + (tot ? ' (' + B.fmt(hits[i] / tot * 100, 1) + '%)' : '') + '</td>';
+    });
+    kp.set({ xmax: total });
+    var series = [], prev = 0;
+    e.forEach(function (edge, i) { series.push({ points: [[prev, 0.5], [edge, 0.5]], color: colors[i], width: 26 }); prev = edge; });
+    kp.draw(series, lastRoll === null ? [] : [{ x: lastRoll, y: 0.5, color: '--ink' }]);
+  }
+  function throwBall(explain) {
+    var e = edges(), total = e[e.length - 1]; if (!total) return;
+    var roll = 1 + Math.floor(Math.random() * total), lo = 0, hi = e.length - 1, steps = [];
+    while (lo < hi) {
+      var mid = Math.floor((lo + hi) / 2);
+      steps.push('check ' + names[mid] + ' (edge ' + e[mid] + '): ' + (roll <= e[mid] ? 'roll fits at or below, look left' : 'roll is above, look right'));
+      if (roll <= e[mid]) hi = mid; else lo = mid + 1;
+    }
+    hits[lo]++; lastRoll = roll - 0.5;
+    if (explain) B.$('k-read').innerHTML = 'roll = <b>' + roll + '</b> of ' + total + '<br>' + steps.join('<br>') + '<br>&rarr; <b>' + names[lo] + '</b>';
+  }
+  B.$('k-one').addEventListener('click', function () { throwBall(true); renderBuckets(); });
+  B.$('k-many').addEventListener('click', function () { for (var i = 0; i < 1000; i++) throwBall(false); B.$('k-read').textContent = 'Threw 1,000. Compare the Hits column with the Share column.'; renderBuckets(); });
+  B.$('k-reset').addEventListener('click', function () { hits = [0, 0, 0, 0]; lastRoll = null; renderBuckets(); });
+  B.$('k-table').addEventListener('change', function (ev) {
+    var i = ev.target.getAttribute('data-i'); if (i === null) return;
+    widths[+i] = Math.max(0, parseInt(ev.target.value, 10) || 0); hits = [0, 0, 0, 0]; lastRoll = null; renderBuckets();
+  });
+  B.onRedraw(renderBuckets); renderBuckets();
+
+  /* ---- lookup-table granularity ---- */
+  var lp = new B.Plot('l-plot', { xmin: 0, xmax: 1, ymin: 0, ymax: 1, xlabel: 'input', ylabel: 'output' });
+  B.wire(['l-n', 'l-lerp'], function () {
+    var n = B.val('l-n'), lerp = B.$('l-lerp').value === '1';
+    var f = function (x) { return 1 / (1 + Math.exp(-12 * (x - 0.5))); };
+    var tbl = []; for (var i = 0; i < n; i++) tbl.push(f(i / (n - 1)));
+    var look = function (x) {
+      var p = x * (n - 1), i0 = Math.min(n - 1, Math.floor(p));
+      if (!lerp || i0 >= n - 1) return tbl[i0];
+      return tbl[i0] + (tbl[i0 + 1] - tbl[i0]) * (p - i0);
+    };
+    var worst = 0; for (var s = 0; s <= 400; s++) worst = Math.max(worst, Math.abs(f(s / 400) - look(s / 400)));
+    lp.draw([{ fn: f, color: '--c1', label: 'formula' }, { fn: look, color: '--c4', label: 'table lookup', width: 1.6 }]);
+    B.$('l-read').innerHTML = n + ' entries, ' + (lerp ? 'interpolated' : 'stepped') + '<br>largest error = <b>' + B.fmt(worst, 3) + '</b>';
+  });
+})();
+</script>
+</body>
+</html>

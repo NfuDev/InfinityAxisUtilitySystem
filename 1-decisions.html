@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Part 1: How decisions work</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+  <p class="kicker">Part 1 &middot; Chapters 1 to 6</p>
+  <h1>How decisions work</h1>
+  <p class="lead">The first third of the book has almost no code. Its job is to change what you aim for: not an agent that finds the mathematically best move, but one whose choices look like they came from a person.</p>
+
+  <h2 id="why">Why bother with behaviour at all</h2>
+  <p>The book opens with Sid Meier's definition: a game is a series of interesting choices. Mark turns that around. If the player's choices should be interesting, so should the AI's, because the AI's choices are what the player reacts to.</p>
+  <p>Good animation makes an agent look alive for a few seconds. Then the player watches what it <em>does</em>. An enemy that always charges, or always retreats at exactly 25% health, stops being a character and becomes a mechanism the player has solved.</p>
+
+  <h3>The three skills of chapters 2 and 3</h3>
+  <ol>
+    <li><b>Identify factors.</b> For any behaviour, ask what a person would look at. Some factors are obvious (my health). Some are hidden (how far is cover, is a friend nearby, did this work last time).</li>
+    <li><b>Quantify them.</b> A factor you cannot put a number on cannot drive an algorithm. "The enemy is dangerous" has to become damage per second, or time until I die.</li>
+    <li><b>Use numbers three ways.</b> To <em>select</em> between options, to <em>define</em> how strongly an option is performed, and to <em>construct</em> other numbers from simpler ones.</li>
+  </ol>
+
+  <div class="lab">
+    <h4>From a rule to a score</h4>
+    <p class="hint">The book's first game example is the engagement decision: fight or run. Start with the classic rule, then switch to a score and watch what changes.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>My health <output></output></span><input type="range" id="e-my" min="1" max="100" value="60"></label>
+        <label class="ctl"><span>Enemy health <output></output></span><input type="range" id="e-en" min="1" max="100" value="70"></label>
+        <label class="ctl"><span>Allies near me <output></output></span><input type="range" id="e-al" min="0" max="5" value="1"></label>
+        <label class="ctl"><span>Enemies near me <output></output></span><input type="range" id="e-ec" min="1" max="6" value="2"></label>
+        <label class="ctl"><span>Mode</span>
+          <select id="e-mode"><option value="rule">Rule: flee if my health is under 25</option><option value="score">Score: compare our side with theirs</option></select></label>
+      </div>
+      <div>
+        <div id="e-bars"></div>
+        <div class="readout" id="e-read"></div>
+        <div class="verdict" id="e-verdict"></div>
+      </div>
+    </div>
+  </div>
+  <p>With the rule, three of the four sliders do nothing. With the score, every factor moves the answer a little, and there is no single magic number the player can learn. That shift, from <code>if</code> statements to continuous scores, is the whole book in miniature.</p>
+
+  <h2 id="theory">Two kinds of decision theory</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th></th><th>Normative</th><th>Descriptive</th></tr>
+    <tr><td><b>Question</b></td><td>What <em>should</em> a perfectly rational agent do?</td><td>What <em>do</em> people actually do?</td></tr>
+    <tr><td><b>Assumes</b></td><td>Complete information, unlimited calculation, pure self-interest.</td><td>Partial information, limited time, emotion, habit, fairness.</td></tr>
+    <tr><td><b>Result in a game</b></td><td>Optimal, identical, predictable agents.</td><td>Varied, believable, sometimes wrong agents.</td></tr>
+  </table></div>
+  <p>Mark's position, which the rest of the book builds on: use the normative tools (scores, expected value) as the engine, then deliberately bend the result toward descriptive behaviour with curves, personal weights and controlled randomness.</p>
+
+  <h2 id="game-theory">Game theory in four small games</h2>
+  <p>Chapter 5 walks through classic games. Each one teaches a specific lesson about modelling an opponent.</p>
+
+  <h3>Prisoner's Dilemma (the book's "Dueling Rocket Launchers")</h3>
+  <p>Two players each choose to cooperate or defect, without knowing the other's choice. Click a cell to see why defecting always looks better for one player alone, and why both doing it is worse for everyone.</p>
+  <div class="lab">
+    <h4>The payoff matrix</h4>
+    <p class="hint">Numbers are years in prison (yours, theirs). Lower is better. Click any cell.</p>
+    <table class="matrix" id="pd">
+      <tr><th></th><th>They stay silent</th><th>They betray</th></tr>
+      <tr><th>You stay silent</th><td data-k="cc">1 , 1</td><td data-k="cd">10 , 0</td></tr>
+      <tr><th>You betray</th><td data-k="dc">0 , 10</td><td data-k="dd">5 , 5</td></tr>
+    </table>
+    <div class="readout" id="pd-read">Click a cell.</div>
+  </div>
+  <div class="note book"><b>Lesson from the book</b><p>Betraying is the <em>strictly dominant</em> strategy: whatever the other player does, you personally do better by betraying. Yet two rational players end at (5, 5), which is worse for both than (1, 1). Reasoning only about your own choice, without modelling the other mind, lands on an acceptable but not optimal result. The book comes back to this when it decides to score "which enemy" and "which weapon" as one combined decision in Part 5.</p></div>
+
+  <h3>The other three</h3>
+  <ul>
+    <li><b>Matching Pennies ("Matching Punches").</b> There is no best pure move. If you are predictable you lose. The only stable play is to mix moves randomly. This is the first argument for randomness in AI.</li>
+    <li><b>Ultimatum Game.</b> One player proposes a split of some money and the other accepts or both get nothing. Pure logic says accept any offer above zero. Real people reject offers they find unfair, even at a cost to themselves.</li>
+    <li><b>Dictator and Trust Games.</b> People give away money when nothing forces them to. Fairness and reputation are real inputs to decisions.</li>
+  </ul>
+  <p>The shared conclusion: an opponent model built on pure self-interest predicts people badly. Factors like fairness, spite and trust have utility too, and you can score them like anything else.</p>
+
+  <h2 id="rational">Perfect rationality loses to real crowds</h2>
+  <p>Chapter 6 uses one game to bury the idea that the "correct" answer is the useful one. Everyone picks a number from 0 to 100. Whoever is closest to two-thirds of the average wins.</p>
+  <p>If everyone guesses randomly the average is 50, so you should say 33. But if everyone thinks that, you should say 22. Repeat forever and the only perfectly rational answer is 0.</p>
+
+  <div class="lab">
+    <h4>Guess two-thirds of the average</h4>
+    <p class="hint">Choose how many steps of "they think that I think" you apply, then run a crowd. The crowd mix is the one the book builds from a large newspaper experiment: 5% say 33, 3% say 22, 30% guess at random, 62% reason part of the way.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Your depth of reasoning <output></output></span><input type="range" id="g-depth" min="0" max="12" value="1"></label>
+        <div class="readout" id="g-mine"></div>
+        <div class="row"><button class="btn primary" id="g-run" type="button">Run a crowd of 2,000</button></div>
+        <div class="readout" id="g-read">Not run yet.</div>
+      </div>
+      <div><canvas class="plot" id="g-plot"></canvas></div>
+    </div>
+  </div>
+  <div class="note book"><b>Lesson from the book</b><p>In the real experiment the average was a little over 32, so the winning guess was near 21.6. The "perfect" answer of 0 was one of the worst possible entries. To win you needed a model of how other people actually think, not a proof. The same holds for an AI trying to anticipate a player.</p>
+  <p style="font-size:13.5px;color:var(--ink-2)">The four group sizes are the book's. The exact spread I use for the "partly reasoning" group is my own stand-in so the simulation has something to draw.</p></div>
+
+  <h2 id="bounded">Bounded rationality: thinking has a price</h2>
+  <p>Real decision makers are limited in three ways, and the book argues agents should be too.</p>
+  <ul>
+    <li><b>They use information badly.</b> People anchor on irrelevant numbers and ignore relevant ones.</li>
+    <li><b>Information costs something.</b> Sending a scout takes time and risks the scout. The book's "Scouting the Enemy" and "Counting the Enemy" examples treat knowing more as a purchase: worth it only when the better decision it enables is worth more than the delay.</li>
+    <li><b>Calculation costs something.</b> A decision that arrives late is worse than a rougher one that arrives on time. This is "rational ignorance": choosing not to know.</li>
+  </ul>
+  <div class="note impl"><b>What this means for your GOAP agents</b>
+    <p>Do not give agents perfect knowledge and then try to make them look fallible afterwards. Give them a limited, slightly stale view (last known position, estimated health) and score from that. Mistakes that come from imperfect input look natural. Mistakes injected into perfect input look like bugs.</p></div>
+
+  <details><summary>Check yourself</summary>
+    <ol>
+      <li>Give one hidden factor for "should this guard investigate a noise". <em>(Examples: how many times it has already found nothing, whether another guard is closer, how far it is from its post.)</em></li>
+      <li>Why is the optimal answer to the two-thirds game a bad answer in practice? <em>(It assumes every other player is also perfectly rational, and they are not.)</em></li>
+      <li>What does Matching Pennies say about a boss with a fixed attack pattern? <em>(Any deterministic pattern can be learned and exploited, so some mixing is needed.)</em></li>
+    </ol>
+  </details>
+</main>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var B = BM;
+
+  /* ---- engagement decision ---- */
+  B.wire(['e-my', 'e-en', 'e-al', 'e-ec', 'e-mode'], function () {
+    var my = B.val('e-my'), en = B.val('e-en'), al = B.val('e-al'), ec = B.val('e-ec');
+    var mode = B.$('e-mode').value, fight, flee, text;
+    if (mode === 'rule') {
+      fight = my >= 25 ? 1 : 0; flee = 1 - fight;
+      text = 'if (myHealth &lt; 25) flee(); else fight();<br>Only <b>my health</b> is read. Enemy health, allies and enemy count are ignored.';
+    } else {
+      var ours = my * (1 + al), theirs = en * ec;
+      fight = ours / (ours + theirs); flee = 1 - fight;
+      text = 'ourSide = myHealth * (1 + allies) = <b>' + ours + '</b><br>theirSide = enemyHealth * enemies = <b>' + theirs +
+        '</b><br>fight = ourSide / (ourSide + theirSide) = <b>' + B.fmt(fight, 2) + '</b>';
+    }
+    B.bars('e-bars', [{ label: 'Fight', value: fight }, { label: 'Flee', value: flee }], { max: 1, best: 'max', digits: 2 });
+    B.$('e-read').innerHTML = text;
+    var v = B.$('e-verdict');
+    v.textContent = fight >= flee ? 'Decision: fight' : 'Decision: flee';
+    v.className = 'verdict' + (fight >= flee ? '' : ' bad');
+  });
+
+  /* ---- prisoner's dilemma ---- */
+  var pdText = {
+    cc: 'Both silent: 1 year each. Best joint result, but each of you could do better alone by betraying.',
+    cd: 'You stay silent, they betray: you serve 10 years. This is the outcome fear of the other player pushes you away from.',
+    dc: 'You betray, they stay silent: you walk free. Tempting, which is exactly the problem.',
+    dd: 'Both betray: 5 years each. This is where two self-interested players end up, although both prefer the top-left cell.'
+  };
+  document.querySelectorAll('#pd td').forEach(function (td) {
+    td.addEventListener('click', function () {
+      document.querySelectorAll('#pd td').forEach(function (x) { x.classList.remove('hot'); });
+      td.classList.add('hot');
+      B.$('pd-read').textContent = pdText[td.getAttribute('data-k')];
+    });
+  });
+
+  /* ---- guess 2/3 ---- */
+  var plot = new B.Plot('g-plot', { xmin: 0, xmax: 100, ymin: 0, ymax: 1, xlabel: 'guess', ylabel: 'share of crowd (scaled)' });
+  var hist = null, target = null;
+  function myGuess() { return 50 * Math.pow(2 / 3, B.val('g-depth')); }
+  function drawG() {
+    var marks = [{ x: myGuess(), vline: true, color: '--c2', noDot: true }];
+    if (target !== null) marks.push({ x: target, vline: true, color: '--c1', noDot: true });
+    var series = [];
+    if (hist) {
+      var pts = [], max = Math.max.apply(null, hist);
+      for (var i = 0; i < hist.length; i++) { pts.push([i * 2, hist[i] / max]); pts.push([i * 2 + 2, hist[i] / max]); }
+      series.push({ points: pts, color: '--c4', label: 'crowd guesses', width: 1.6 });
+    }
+    plot.draw(series, marks);
+    var d = B.val('g-depth');
+    B.$('g-mine').innerHTML = 'Your guess = 50 &times; (2/3)^' + d + ' = <b>' + B.fmt(myGuess(), 1) + '</b>' + (d >= 12 ? ' (heading to 0)' : '');
+  }
+  function gauss() { return (Math.random() + Math.random() + Math.random() + Math.random() - 2) / 2; }
+  B.$('g-run').addEventListener('click', function () {
+    var n = 2000, sum = 0, h = new Array(50).fill(0);
+    for (var i = 0; i < n; i++) {
+      var r = Math.random() * 100, g;
+      if (r < 5) g = 33; else if (r < 8) g = 22; else if (r < 38) g = Math.random() * 100;
+      else g = B.clamp(30 + gauss() * 28, 0, 100);
+      sum += g; h[Math.min(49, Math.floor(g / 2))]++;
+    }
+    hist = h; var avg = sum / n; target = avg * 2 / 3;
+    var mine = myGuess(), err = Math.abs(mine - target);
+    B.$('g-read').innerHTML = 'Crowd average <b>' + B.fmt(avg, 1) + '</b>, so the target is <b>' + B.fmt(target, 1) +
+      '</b>.<br>You were off by <b>' + B.fmt(err, 1) + '</b>. The perfectly rational 0 was off by <b>' + B.fmt(target, 1) + '</b>.';
+    drawG();
+  });
+  B.wire(['g-depth'], drawG);
+})();
+</script>
+</body>
+</html>

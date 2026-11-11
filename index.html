@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Behavioral Mathematics for Game AI: study guide</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+  <p class="kicker">Study guide &middot; Dave Mark, 2009</p>
+  <h1>Behavioral Mathematics for Game AI, as something you can build</h1>
+  <p class="lead">The book spends 450 pages on one idea: turn everything an agent cares about into numbers on a common scale, shape those numbers with curves, combine them into one score per option, and then pick an option in a way that looks human. These pages compress that into six parts, each with widgets you can poke at.</p>
+
+  <div class="note beyond">
+    <b>Read this first: what the book does and does not contain</b>
+    <p>The <em>Infinite Axis Utility System</em> (IAUS) is not in this book. Dave Mark presented it later, in GDC talks from about 2013 onward. This book is the foundation it was built on: utility, response curves, normalisation, weighting, and selection.</p>
+    <p>Pages 1 to 5 summarise the book. Page 6 is my own bridge from the book to IAUS and to your GOAP planner. It is clearly marked, and it draws on Mark's later talks and common practice, not on the book's text.</p>
+  </div>
+
+  <h2 id="pipeline">The whole book in one picture</h2>
+  <p>Every worked example in the book follows this pipeline. If you remember only one thing, remember this.</p>
+  <div class="flow">
+    <div><b>1. Observe</b>List the factors that matter to this decision.</div><div class="arrow">&rarr;</div>
+    <div><b>2. Measure</b>Get a raw value for each: health, distance, ammo.</div><div class="arrow">&rarr;</div>
+    <div><b>3. Shape</b>Turn value into utility with a response curve.</div><div class="arrow">&rarr;</div>
+    <div><b>4. Normalise</b>Put every utility on the same 0 to 1 scale.</div><div class="arrow">&rarr;</div>
+    <div><b>5. Combine</b>Weight and merge into one score per option.</div><div class="arrow">&rarr;</div>
+    <div><b>6. Select</b>Pick: best, or weighted random among the good ones.</div><div class="arrow">&rarr;</div>
+    <div><b>7. Revisit</b>Re-check at a sensible rate, with momentum.</div>
+  </div>
+
+  <h2 id="pages">The six parts</h2>
+  <div class="cards">
+    <a class="card" href="1-decisions.html"><span class="n">PART 1</span><h3>How decisions work</h3><p>Why "what should a perfect agent do" and "what do people actually do" are different questions, and why game AI wants the second.</p><p class="ch">Chapters 1 to 6</p></a>
+    <a class="card" href="2-utility.html"><span class="n">PART 2</span><h3>Utility</h3><p>Value is not utility. Expected utility under risk, the utility of time, marginal utility, and comparing unlike things.</p><p class="ch">Chapters 7 to 9</p></a>
+    <a class="card" href="3-curves.html"><span class="n">PART 3</span><h3>Functions and response curves</h3><p>The curve toolbox: linear, polynomial, logistic, logit. Probability distributions, and the bucket structure behind weighted random picks.</p><p class="ch">Chapters 10 to 12</p></a>
+    <a class="card" href="4-weighting.html"><span class="n">PART 4</span><h3>Normalising and weighting</h3><p>Getting different factors onto one scale, weighted sums, and layering small decisions into large ones.</p><p class="ch">Chapter 13</p></a>
+    <a class="card" href="5-decision-model.html"><span class="n">PART 5</span><h3>Building a decision</h3><p>The book's full worked example (which enemy, with which weapon), then when to change your mind and how to avoid robotic choices.</p><p class="ch">Chapters 14 to 16</p></a>
+    <a class="card" href="6-iaus-goap.html"><span class="n">PART 6 &middot; BEYOND THE BOOK</span><h3>Infinite Axis Utility + GOAP</h3><p>How the book's tools become an IAUS scorer, and three ways to plug that scorer into a GOAP planner.</p><p class="ch">Bridge to your project</p></a>
+  </div>
+
+  <h2 id="how">How to use these pages</h2>
+  <ul>
+    <li><b>Read in order the first time.</b> Each part uses terms from the one before. Parts 3, 4 and 5 are the ones you will come back to while coding.</li>
+    <li><b>Play with every "Try it" box.</b> The point of the book is intuition for how numbers change behaviour. Dragging a slider teaches that faster than reading does.</li>
+    <li><b>Hover any plot</b> to read exact values off the curve.</li>
+    <li>Coloured boxes mean: <span style="color:var(--warn);font-weight:600">yellow</span> is an example taken from the book, <span style="color:var(--ok);font-weight:600">green</span> is implementation advice, <span style="color:var(--accent);font-weight:600">orange</span> is material that goes beyond the book.</li>
+  </ul>
+
+  <h2 id="glossary">Vocabulary you will see everywhere</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Term</th><th>Meaning</th><th>Where</th></tr>
+    <tr><td><b>Value</b></td><td>The raw, measurable amount of something: 40 health, 12 metres, 3 bullets.</td><td>Part 2</td></tr>
+    <tr><td><b>Utility</b></td><td>How much that amount matters to this agent, right now, for this decision. Usually not proportional to value.</td><td>Part 2</td></tr>
+    <tr><td><b>Marginal utility</b></td><td>How much one <em>more</em> unit is worth. It falls for most things (the tenth soldier) and rises for some (the last sliver of health).</td><td>Part 2</td></tr>
+    <tr><td><b>Response curve</b></td><td>A function, formula or lookup table, that maps an input to an output. The main tool for turning value into utility.</td><td>Part 3</td></tr>
+    <tr><td><b>Normalisation</b></td><td>Rescaling a number into a fixed range, almost always 0 to 1, so it can be compared with others.</td><td>Part 4</td></tr>
+    <tr><td><b>Weighted sum</b></td><td>Adding several utilities together after multiplying each by how important it is.</td><td>Part 4</td></tr>
+    <tr><td><b>Compartmentalised confidence</b></td><td>The book's phrase for: verify each small piece alone, then trust it when you combine pieces.</td><td>Parts 4, 5</td></tr>
+    <tr><td><b>Strobing</b></td><td>An agent flipping between two choices over and over. Cured with decision momentum.</td><td>Part 5</td></tr>
+    <tr><td><b>Normative / descriptive</b></td><td>What a perfectly rational agent should do, versus what real people do.</td><td>Part 1</td></tr>
+  </table></div>
+
+  <div class="note impl">
+    <b>If you only have an hour</b>
+    <p>Do the curve explorer in Part 3, the dinner example in Part 4, the Dudes simulator in Part 5, then all of Part 6. That is the shortest path from the book to working code.</p>
+  </div>
+</main>
+<script src="assets/app.js"></script>
+</body>
+</html>

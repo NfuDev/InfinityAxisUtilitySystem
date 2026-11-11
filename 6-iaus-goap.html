@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Part 6: Infinite Axis Utility + GOAP</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+  <p class="kicker">Part 6 &middot; Beyond the book</p>
+  <h1>From the book to an Infinite Axis Utility System, and into GOAP</h1>
+  <p class="lead">This page connects the book's tools to the system you want to build. It is my synthesis, not a summary of the book.</p>
+
+  <div class="note beyond"><b>Where this material comes from</b>
+    <p>The book (2009) never uses the name "Infinite Axis Utility System". Dave Mark described IAUS later, mainly in his GDC AI Summit talks "Architecture Tricks: Managing Behaviors in Time, Space, and Depth" (2013) and "Building a Better Centaur: AI at Massive Scale" (2015, with Mike Lewis). What follows is my understanding of those talks plus common practice. The GOAP integration patterns are standard approaches, not something either source prescribes. Treat the numbers in the widgets as starting points to tune.</p></div>
+
+  <h2 id="map">What IAUS takes from the book</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Book concept</th><th>IAUS name</th><th>What changed</th></tr>
+    <tr><td>A factor you identified (Part 1, Part 5 step 1)</td><td><b>Input</b></td><td>A named function that reads one number from the world: <code>MyHealth</code>, <code>DistanceToTarget</code>.</td></tr>
+    <tr><td>Normalising to 0..1 (Part 4)</td><td><b>Bookends</b></td><td>Each use of an input states its own min and max, so "close" can mean 3 m for melee and 20 m for a rifle.</td></tr>
+    <tr><td>Response curve: value to utility (Part 3)</td><td><b>Response curve</b></td><td>Always stored as a type plus the four parameters m, k, b, c. Pure data, no code per behaviour.</td></tr>
+    <tr><td>One factor shaped by one curve</td><td><b>Consideration</b>, also called an <b>axis</b></td><td>Input + bookends + curve. Outputs 0..1.</td></tr>
+    <tr><td>Scoring one option (Part 5)</td><td><b>Decision</b> (a "decision score evaluator")</td><td>A list of considerations of any length, hence "infinite axis", plus a weight.</td></tr>
+    <tr><td>Weighted sums and layered models (Part 4)</td><td><b>Multiply, then compensate</b></td><td>Considerations are multiplied, so any zero vetoes the decision.</td></tr>
+    <tr><td>(enemy, weapon) pairs as options (Part 5)</td><td><b>Context</b></td><td>One decision definition is scored once per target or per position.</td></tr>
+    <tr><td>Decision momentum (Part 5)</td><td><b>Inertia bonus</b></td><td>A multiplier on the decision currently running.</td></tr>
+    <tr><td>Weighted random from all (Part 5)</td><td><b>Weighted random selection</b></td><td>Unchanged. Higher score is better, so score is the weight directly.</td></tr>
+  </table></div>
+
+  <h2 id="anatomy">Anatomy of one decision</h2>
+  <div class="flow">
+    <div><b>Input</b>read a raw value<br><code>dist = 12 m</code></div><div class="arrow">&rarr;</div>
+    <div><b>Bookends</b>normalise<br><code>(12 &minus; 0) / (30 &minus; 0) = 0.4</code></div><div class="arrow">&rarr;</div>
+    <div><b>Curve</b>shape it<br><code>f(0.4) = 0.93</code></div><div class="arrow">&rarr;</div>
+    <div><b>Multiply</b>with the other axes<br><code>0.93 &times; 0.8 &times; ...</code></div><div class="arrow">&rarr;</div>
+    <div><b>Weight</b>priority of this decision<br><code>&times; 1.0</code></div>
+  </div>
+
+  <h3>Why multiply, and the compensation factor</h3>
+  <p>Multiplying gives every consideration a veto: no ammo means the Shoot decision scores zero regardless of how good the target is. The cost is that products of fractions shrink. Three axes at 0.9 give 0.73. Six give 0.53. A decision with more axes would lose to a simpler one purely for being more carefully described.</p>
+  <p>Mark's fix is a compensation step that pulls each axis score up by an amount that depends on how many axes the decision has:</p>
+<pre><code>float Compensate(float score, int axisCount) {
+    float modification = 1.0f - (1.0f / axisCount);
+    float makeUp       = (1.0f - score) * modification;
+    return score + makeUp * score;          // still 0 when score is 0, still 1 when score is 1
+}
+
+float ScoreDecision(const Decision&amp; d, const Context&amp; ctx, float bestSoFar) {
+    float total = d.weight;
+    for (const Consideration&amp; c : d.considerations) {
+        float raw  = c.input(ctx);                                   // e.g. distance in metres
+        float x    = clamp((raw - c.min) / (c.max - c.min), 0, 1);   // bookends
+        float axis = clamp(EvaluateCurve(c.curve, x), 0, 1);         // m, k, b, c
+        total *= Compensate(axis, d.considerations.size());
+        if (total &lt;= bestSoFar) return 0;                            // cannot win: stop early
+    }
+    return total;
+}</code></pre>
+
+  <div class="lab">
+    <h4>Multiplication and compensation</h4>
+    <p class="hint">Set how many axes the decision has and what each one scores. Then drag any single axis to zero.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Number of axes <output></output></span><input type="range" id="k-n" min="1" max="8" value="4"></label>
+        <label class="ctl"><span>Score of axes 2 and up <output></output></span><input type="range" id="k-s" min="0" max="1" step="0.01" value="0.9"></label>
+        <label class="ctl"><span>Score of axis 1 <output></output></span><input type="range" id="k-one" min="0" max="1" step="0.01" value="0.9"></label>
+      </div>
+      <div><div id="k-bars"></div><div class="readout" id="k-read"></div></div>
+    </div>
+  </div>
+
+  <h2 id="brain">A complete small brain</h2>
+  <p>Below is a working scorer. Six actions, each a list of considerations stored as plain data. The world sliders are the only inputs. Click an action's bar to see exactly why it scored what it did.</p>
+
+  <div class="lab">
+    <h4>IAUS action scoring</h4>
+    <p class="hint">Start by lowering health, then emptying ammo, then moving the enemy close. Add inertia and wiggle a slider near a tie.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>My health <output></output></span><input type="range" id="s-hp" min="0" max="1" step="0.01" value="0.8"></label>
+        <label class="ctl"><span>Enemy health <output></output></span><input type="range" id="s-ehp" min="0" max="1" step="0.01" value="0.7"></label>
+        <label class="ctl"><span>Distance to enemy <output></output></span><input type="range" id="s-dist" min="0" max="30" step="0.5" value="14" data-suffix=" m"></label>
+        <label class="ctl"><span>Ammo in magazine <output></output></span><input type="range" id="s-ammo" min="0" max="1" step="0.01" value="0.6"></label>
+        <label class="ctl"><span>Distance to nearest cover <output></output></span><input type="range" id="s-cover" min="0" max="30" step="0.5" value="8" data-suffix=" m"></label>
+        <label class="ctl"><span>Enemies in sight <output></output></span><input type="range" id="s-en" min="1" max="6" value="2"></label>
+        <label class="ctl"><span>Allies nearby <output></output></span><input type="range" id="s-al" min="0" max="4" value="1"></label>
+        <label class="ctl"><span>Inertia bonus for the current action <output></output></span><input type="range" id="s-inertia" min="0" max="0.5" step="0.01" value="0" data-suffix=""></label>
+        <label class="ctl"><span>Compensation factor</span><select id="s-comp"><option value="1">On</option><option value="0">Off</option></select></label>
+      </div>
+      <div>
+        <div id="s-bars"></div>
+        <div class="verdict" id="s-verdict"></div>
+        <p class="hint" style="margin-top:10px">Click a bar to inspect that action in the table below.</p>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table id="s-why"></table></div>
+  </div>
+
+  <h3>The data behind that widget</h3>
+  <p>This is the entire behaviour definition. Nothing about these six actions lives in code. Adding a seventh is adding rows.</p>
+  <div class="tbl-wrap"><table id="s-data"></table></div>
+  <div class="note impl"><b>Authoring rules that keep this tunable</b>
+    <ul>
+      <li><b>One consideration, one question.</b> "Am I healthy enough?" and "Is the target close enough?" are separate axes even if they use the same curve.</li>
+      <li><b>Weights rank categories, not preferences.</b> Use a handful of bands (for example idle 1, normal combat 2, urgent 3, emergency 5). Let considerations do the fine work inside a band. This avoids the book's climbing fader syndrome.</li>
+      <li><b>Put the cheapest and most likely-zero axis first.</b> "Has ammo" before "line of sight raycast", so the early-out skips the expensive one.</li>
+      <li><b>Build a debug view first.</b> For any agent, show every decision's final score and each axis value. This is compartmentalised confidence made practical: when a result looks wrong you can see which single axis caused it.</li>
+    </ul></div>
+
+  <h3>Contexts: scoring per target</h3>
+  <p>The Shoot decision above assumes one enemy. In practice you score it once for every visible enemy, exactly as the book scored every (Dude, weapon) pair. The option that wins is "Shoot <em>at Evil Genius</em>", and the target comes along with it into whatever executes the action.</p>
+<pre><code>for (Decision&amp; d : agent.decisions)
+    for (Context&amp; ctx : d.MakeContexts(agent))      // one per target, per cover point, ...
+        options.push_back({ &amp;d, ctx, ScoreDecision(d, ctx, 0) });
+
+Option chosen = WeightedRandom(options);            // or highest, during early development</code></pre>
+
+  <h2 id="goap">Combining it with GOAP</h2>
+  <p>GOAP and utility answer different questions. GOAP answers <em>how</em>: given a goal, search for a sequence of actions whose effects satisfy it. Utility answers <em>what matters now</em>. Classic GOAP is weak exactly where utility is strong: goals usually have fixed priorities and action costs are constants. There are three places to plug the scorer in, and they can be used together.</p>
+
+  <div class="tbl-wrap"><table>
+    <tr><th>Pattern</th><th>What utility decides</th><th>What GOAP decides</th><th>Use when</th></tr>
+    <tr><td><b>A. Utility picks the goal</b></td><td>Which goal to pursue. Each goal is an IAUS decision.</td><td>The action sequence that reaches it.</td><td>Almost always. This is the cleanest split and the first one to build.</td></tr>
+    <tr><td><b>B. Utility prices the actions</b></td><td>Each action's cost, recomputed from its utility at plan time.</td><td>The cheapest plan, which now reflects the situation.</td><td>The planner keeps choosing a technically valid but silly route.</td></tr>
+    <tr><td><b>C. Utility binds the parameters</b></td><td>Which target, which cover point, which weapon an action uses.</td><td>Sequence only. Actions arrive with their best target already chosen.</td><td>Many targets or positions. Keeps the planner's search space small.</td></tr>
+  </table></div>
+
+  <h3>Pattern B in one line</h3>
+  <div class="formula">cost = baseCost &times; (1 + k &times; (1 &minus; utility)) &nbsp;&nbsp;&nbsp; utility in 0..1, k around 1 to 3</div>
+  <p>A high-utility action costs its base price. A low-utility one costs up to (1 + k) times more. Costs stay positive, which A* requires, and they never drop below the base cost, so a heuristic built from base costs stays valid.</p>
+
+  <div class="lab">
+    <h4>Utility-driven GOAP, patterns A and B together</h4>
+    <p class="hint">This uses the same world sliders as the widget above. Three goals are scored as IAUS decisions. The winning goal goes to a real, tiny planner (uniform-cost search over six actions). Shoot and Melee are priced from their action scores above.</p>
+    <div class="grid2 even">
+      <div>
+        <b style="font-size:13px;color:var(--ink-2)">GOAL SCORES (pattern A)</b>
+        <div id="g-goals" style="margin:6px 0 10px"></div>
+        <label class="ctl"><span>Goal inertia <output></output></span><input type="range" id="g-inertia" min="0" max="0.5" step="0.01" value="0.15"></label>
+        <label class="ctl"><span>k, how strongly utility changes cost <output></output></span><input type="range" id="g-k" min="0" max="4" step="0.25" value="2"></label>
+        <div class="readout" id="g-state"></div>
+      </div>
+      <div>
+        <b style="font-size:13px;color:var(--ink-2)">PLAN FOR THE CHOSEN GOAL</b>
+        <div class="tbl-wrap"><table id="g-plan"></table></div>
+        <b style="font-size:13px;color:var(--ink-2)">ACTION COSTS RIGHT NOW (pattern B)</b>
+        <div class="tbl-wrap"><table id="g-costs"></table></div>
+      </div>
+    </div>
+  </div>
+  <p>Things to try: empty the magazine at long range (the plan becomes Reload then Shoot). Then bring the enemy to 2 m with an empty magazine (Melee becomes the whole plan, because its utility is high and Reload plus Shoot is now the expensive route). Drop health to 0.2 and the goal itself changes.</p>
+  <p>One detail worth copying: when Shoot is priced for the planner, its Ammo axis is left out. In the pure scorer above, "no ammo" has to zero the action because nothing else will. In GOAP, ammo is a precondition and the planner fixes it by inserting Reload, so pricing it a second time would wrongly make Reload-then-Shoot look terrible.</p>
+
+  <h3>The control loop</h3>
+<pre><code>// Runs on a timer (for example every 200-300 ms, staggered across agents) and on events.
+void Agent::Think() {
+    // 1. PATTERN A: score every goal as an IAUS decision.
+    Goal* best = nullptr; float bestScore = 0;
+    for (Goal&amp; g : goals) {
+        float s = ScoreDecision(g.decision, MakeContext(g), 0);
+        if (&amp;g == currentGoal) s *= (1 + inertia);            // decision momentum (Part 5)
+        if (s &gt; bestScore) { bestScore = s; best = &amp;g; }
+    }
+
+    // 2. Keep the current plan if the goal did not change and the plan is still valid.
+    if (best == currentGoal &amp;&amp; plan.IsStillValid(world)) return;   // "can I still do this?"
+
+    // 3. PATTERN C: bind parameters before planning.
+    for (Action&amp; a : actions) a.target = BestContextFor(a);         // highest-scoring target
+
+    // 4. PATTERN B: price actions from utility, then plan.
+    for (Action&amp; a : actions)
+        a.cost = a.baseCost * (1 + k * (1 - ScoreDecision(a.decision, a.target, 0)));
+
+    currentGoal = best;
+    plan = planner.Plan(world.State(), best-&gt;desiredState, actions);
+    if (plan.empty()) MarkGoalFailed(best);                         // scores lower for a while
+}</code></pre>
+
+  <div class="note impl"><b>Pitfalls specific to this combination</b>
+    <ul>
+      <li><b>Replanning storms.</b> If goal scores are close, the agent replans every tick. Use inertia on the current goal, and only replan when the goal changes or the plan becomes invalid. This is the strobing problem from Part 5 with a more expensive symptom.</li>
+      <li><b>Commit at action boundaries.</b> Like the book's "rescore after each shot", prefer to switch goals between plan steps. Reserve mid-action interrupts for a small set of urgent events.</li>
+      <li><b>Unreachable goals.</b> A goal can score highest and have no plan. Record the failure and suppress that goal's score for a few seconds, or it will be chosen and fail forever.</li>
+      <li><b>Stale costs.</b> Utility-based costs are a snapshot. A long plan was priced with numbers that will be wrong by step four. Keep plans short and revalidate, which is the book's information-expiry point.</li>
+      <li><b>Do not put precondition logic in curves.</b> "Needs ammo" belongs in the GOAP precondition, where the planner can solve it by inserting Reload. A curve that zeroes the action just hides it. Use curves for preference, preconditions for possibility.</li>
+      <li><b>Keep the planner's state boolean and the utility's inputs continuous.</b> They are different views of the same world. Derive both from one world-state object so they cannot disagree.</li>
+    </ul></div>
+
+  <h2 id="order">A build order that works</h2>
+  <ol>
+    <li><b>Curve evaluator.</b> Four types, four parameters, clamped output. Test it with a plotter like the one in Part 3.</li>
+    <li><b>Inputs.</b> A registry of named functions that read one number from the agent's world state.</li>
+    <li><b>Consideration and Decision as data.</b> Data assets or tables, not code.</li>
+    <li><b>Scorer</b> with compensation and early-out.</li>
+    <li><b>Debug view.</b> Per agent: every decision, every axis, raw input, normalised input, curve output.</li>
+    <li><b>Pattern A.</b> Replace your GOAP goal priorities with scored goals. Add inertia. Ship this before anything else.</li>
+    <li><b>Contexts</b> for target selection (pattern C).</li>
+    <li><b>Pattern B</b> only where plans look wrong.</li>
+    <li><b>Weighted random selection</b> last, once the scores are trustworthy, so that variation is not hiding bugs.</li>
+  </ol>
+
+  <details><summary>Check yourself</summary>
+    <ol>
+      <li>A decision has five axes all scoring 0.8. What is the raw product, and why is that a problem? <em>(0.33. It would lose to a one-axis decision scoring 0.5 despite being a better fit on every axis.)</em></li>
+      <li>Where should "the agent needs a key to open this door" live: a consideration or a precondition? <em>(A precondition, so the planner can add "get key" to the plan.)</em></li>
+      <li>Which pattern gives the most benefit for the least work in an existing GOAP system? <em>(Pattern A: score the goals.)</em></li>
+    </ol>
+  </details>
+</main>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var B = BM, C = B.Curves;
+
+  function compensate(score, n) { var mod = 1 - 1 / n; return score + (1 - score) * mod * score; }
+
+  /* ---------- compensation demo ---------- */
+  B.wire(['k-n', 'k-s', 'k-one'], function () {
+    var n = B.val('k-n'), s = B.val('k-s'), one = B.val('k-one');
+    var raw = one, comp = compensate(one, n);
+    for (var i = 1; i < n; i++) { raw *= s; comp *= compensate(s, n); }
+    B.bars('k-bars', [{ label: 'Raw product', value: raw }, { label: 'With compensation', value: comp }], { max: 1, digits: 3 });
+    B.$('k-read').innerHTML = 'raw = ' + B.fmt(one, 2) + (n > 1 ? ' &times; ' + B.fmt(s, 2) + '^' + (n - 1) : '') + ' = <b>' + B.fmt(raw, 3) + '</b><br>' +
+      'each axis adjusted with modification = 1 &minus; 1/' + n + ' = ' + B.fmt(1 - 1 / n, 2) + '<br>compensated = <b>' + B.fmt(comp, 3) + '</b>' +
+      (one === 0 ? '<br>Axis 1 is zero: both are zero. The veto survives compensation.' : '');
+  });
+
+  /* ---------- inputs ---------- */
+  var INPUTS = {
+    MyHealth: { id: 's-hp', min: 0, max: 1 }, EnemyHealth: { id: 's-ehp', min: 0, max: 1 }, DistToEnemy: { id: 's-dist', min: 0, max: 30 },
+    Ammo: { id: 's-ammo', min: 0, max: 1 }, DistToCover: { id: 's-cover', min: 0, max: 30 }, EnemyCount: { id: 's-en', min: 1, max: 6 }, AllyCount: { id: 's-al', min: 0, max: 4 }
+  };
+  function cons(input, why, type, m, k, b, c) { return { input: input, why: why, type: type, p: { m: m, k: k, b: b, c: c } }; }
+  var ACTIONS = [
+    { name: 'Melee attack', weight: 1.0, cons: [
+      cons('DistToEnemy', 'Only when very close', 'logistic', -2, 1, 0, 0.15),
+      cons('MyHealth', 'Not when I am weak', 'logistic', 1.2, 1, 0, 0.35),
+      cons('EnemyHealth', 'Prefer finishing a weak enemy', 'poly', -0.6, 2, 1, 0)] },
+    { name: 'Shoot', weight: 1.0, cons: [
+      cons('Ammo', 'Needs ammo; nearly flat once I have some', 'poly', 1, 0.3, 0, 0),
+      cons('DistToEnemy', 'Sweet spot at mid range', 'poly', -3, 2, 1, 0.45),
+      cons('MyHealth', 'Slightly less keen when hurt', 'linear', 0.6, 1, 0.4, 0)] },
+    { name: 'Reload', weight: 0.9, cons: [
+      cons('Ammo', 'More urgent as the magazine empties', 'poly', 1, 2, 0, 1),
+      cons('DistToEnemy', 'Safer when the enemy is not on top of me', 'logistic', 1, 1, 0, 0.25)] },
+    { name: 'Take cover', weight: 0.9, cons: [
+      cons('MyHealth', 'More attractive as health drops', 'poly', -1, 2, 1, 0),
+      cons('DistToCover', 'Only if cover is near', 'poly', -1, 1.5, 1, 0),
+      cons('EnemyCount', 'More attractive when outnumbered', 'linear', 0.6, 1, 0.4, 0)] },
+    { name: 'Heal', weight: 1.0, cons: [
+      cons('MyHealth', 'Soft threshold around 35% health', 'logistic', -1.5, 1, 0, 0.35),
+      cons('DistToEnemy', 'Not with an enemy in my face', 'logistic', 1.5, 1, 0, 0.2)] },
+    { name: 'Flee', weight: 0.8, cons: [
+      cons('MyHealth', 'Only when nearly dead', 'logistic', -2.5, 1, 0, 0.2),
+      cons('EnemyCount', 'More so when outnumbered', 'logistic', 1, 1, 0, 0.5),
+      cons('AllyCount', 'Less so with friends nearby', 'linear', -0.7, 1, 1, 0)] }
+  ];
+  var GOALS = [
+    { name: 'Kill the enemy', want: 'dead', weight: 1.0, cons: [
+      cons('MyHealth', 'Fit enough to fight', 'logistic', 1.2, 1, 0, 0.3),
+      cons('EnemyCount', 'Less keen when badly outnumbered', 'linear', -0.6, 1, 1, 0)] },
+    { name: 'Recover health', want: 'healthy', weight: 1.0, cons: [
+      cons('MyHealth', 'Rises steeply below 40% health', 'logistic', -1.5, 1, 0, 0.4)] },
+    { name: 'Get to safety', want: 'cover', weight: 0.9, cons: [
+      cons('EnemyCount', 'Outnumbered', 'logistic', 1, 1, 0, 0.5),
+      cons('AllyCount', 'Alone', 'linear', -0.6, 1, 1, 0),
+      cons('MyHealth', 'Hurt', 'poly', -1, 2, 1, 0)] }
+  ];
+
+  function readInput(name) { var i = INPUTS[name]; var raw = B.val(i.id); return { raw: raw, x: B.clamp((raw - i.min) / (i.max - i.min), 0, 1) }; }
+  function scoreDecision(d, useComp, skipInput) {
+    var list = d.cons.filter(function (c) { return c.input !== skipInput; });
+    var total = d.weight, rows = [], n = list.length;
+    list.forEach(function (c) {
+      var inp = readInput(c.input), y = C.eval(c.type, inp.x, c.p), adj = useComp ? compensate(y, n) : y;
+      total *= adj;
+      rows.push({ c: c, raw: inp.raw, x: inp.x, y: y, adj: adj });
+    });
+    return { score: total, rows: rows };
+  }
+
+  /* static data table */
+  (function () {
+    var h = '<tr><th>Decision</th><th class="num">Weight</th><th>Input</th><th>Curve</th><th class="num">m</th><th class="num">k</th><th class="num">b</th><th class="num">c</th><th>Question it answers</th></tr>';
+    ACTIONS.forEach(function (a) {
+      a.cons.forEach(function (c, i) {
+        h += '<tr><td>' + (i === 0 ? '<b>' + a.name + '</b>' : '') + '</td><td class="num">' + (i === 0 ? a.weight.toFixed(1) : '') + '</td><td><code>' + c.input + '</code></td><td>' + c.type +
+          '</td><td class="num">' + c.p.m + '</td><td class="num">' + c.p.k + '</td><td class="num">' + c.p.b + '</td><td class="num">' + c.p.c + '</td><td>' + c.why + '</td></tr>';
+      });
+    });
+    B.$('s-data').innerHTML = h;
+  })();
+
+  var current = -1, inspect = -1, currentGoal = -1, lastScores = [];
+
+  function renderWhy(idx, res) {
+    var h = '<tr><th colspan="5">Why "' + ACTIONS[idx].name + '" scored ' + B.fmt(res.score, 3) + '</th></tr><tr><th>Input</th><th class="num">Raw</th><th class="num">0..1</th><th class="num">Curve</th><th class="num">Adjusted</th></tr>';
+    res.rows.forEach(function (r) {
+      h += '<tr><td><code>' + r.c.input + '</code><br><span style="color:var(--ink-2);font-size:12.5px">' + r.c.why + '</span></td><td class="num">' + B.fmt(r.raw, 2) + '</td><td class="num">' + B.fmt(r.x, 2) +
+        '</td><td class="num">' + B.fmt(r.y, 3) + '</td><td class="num">' + B.fmt(r.adj, 3) + '</td></tr>';
+    });
+    h += '<tr><td colspan="4">weight ' + ACTIONS[idx].weight.toFixed(1) + ' &times; product of adjusted</td><td class="num"><b>' + B.fmt(res.score, 3) + '</b></td></tr>';
+    B.$('s-why').innerHTML = h;
+  }
+
+  /* ---------- tiny GOAP planner ---------- */
+  var BITS = { ammo: 1, near: 2, cover: 4, healthy: 8, dead: 16 };
+  function plan(start, goalBit, acts) {
+    var dist = {}, prev = {}, open = [start]; dist[start] = 0;
+    var done = {};
+    while (open.length) {
+      open.sort(function (a, b) { return dist[a] - dist[b]; });
+      var s = open.shift();
+      if (done[s]) continue; done[s] = true;
+      if (s & goalBit) {
+        var steps = [], cur = s;
+        while (prev[cur]) { steps.unshift(prev[cur].act); cur = prev[cur].from; }
+        return { steps: steps, cost: dist[s] };
+      }
+      acts.forEach(function (a) {
+        if ((s & a.need) !== a.need || (s & a.not)) return;
+        var t = (s | a.add) & ~a.del, nd = dist[s] + a.cost;
+        if (dist[t] === undefined || nd < dist[t]) { dist[t] = nd; prev[t] = { from: s, act: a }; open.push(t); }
+      });
+    }
+    return null;
+  }
+
+  function update() {
+    var useComp = B.$('s-comp').value === '1', inertia = B.val('s-inertia');
+    var results = ACTIONS.map(function (a) { return scoreDecision(a, useComp); });
+    var finals = results.map(function (r, i) { return r.score * (i === current ? 1 + inertia : 1); });
+    var best = 0; finals.forEach(function (v, i) { if (v > finals[best]) best = i; });
+    current = best; lastScores = results.map(function (r) { return r.score; });
+    B.bars('s-bars', ACTIONS.map(function (a, i) {
+      return { label: a.name, value: finals[i], best: i === best, text: B.fmt(finals[i], 3) };
+    }), { max: Math.max(1, Math.max.apply(null, finals)) });
+    Array.prototype.forEach.call(B.$('s-bars').children, function (el, i) {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', function () { inspect = i; renderWhy(i, results[i]); });
+    });
+    B.$('s-verdict').textContent = 'Chosen action: ' + ACTIONS[best].name + (inertia > 0 ? ' (current action gets x' + B.fmt(1 + inertia, 2) + ')' : '');
+    var show = inspect >= 0 ? inspect : best;
+    renderWhy(show, results[show]);
+
+    /* ----- goals + plan ----- */
+    var gInertia = B.val('g-inertia'), k = B.val('g-k');
+    var gScores = GOALS.map(function (g, i) { return scoreDecision(g, useComp).score * (i === currentGoal ? 1 + gInertia : 1); });
+    var gBest = 0; gScores.forEach(function (v, i) { if (v > gScores[gBest]) gBest = i; });
+    currentGoal = gBest;
+    B.bars('g-goals', GOALS.map(function (g, i) { return { label: g.name, value: gScores[i], best: i === gBest, text: B.fmt(gScores[i], 3) }; }), { max: Math.max(1, Math.max.apply(null, gScores)) });
+
+    var dist = B.val('s-dist'), cover = B.val('s-cover');
+    var state = (B.val('s-ammo') > 0.05 ? BITS.ammo : 0) | (dist <= 3 ? BITS.near : 0) | (B.val('s-hp') >= 0.7 ? BITS.healthy : 0);
+    var price = function (base, u) { return base * (1 + k * (1 - u)); };
+    /* For pricing, Shoot is scored without its Ammo axis: the planner already handles ammo through Reload. */
+    var shootU = B.clamp(scoreDecision(ACTIONS[1], useComp, 'Ammo').score, 0, 1);
+    var acts = [
+      { name: 'Reload', need: 0, not: BITS.ammo, add: BITS.ammo, del: 0, cost: 2, note: 'fixed' },
+      { name: 'Shoot', need: BITS.ammo, not: 0, add: BITS.dead, del: 0, cost: price(2, shootU), note: 'base 2, utility ' + B.fmt(shootU, 2) + ' (ammo axis left out)' },
+      { name: 'Close in', need: 0, not: BITS.near, add: BITS.near, del: BITS.cover, cost: 1 + dist / 5, note: '1 + distance / 5' },
+      { name: 'Melee', need: BITS.near, not: 0, add: BITS.dead, del: 0, cost: price(2, B.clamp(lastScores[0], 0, 1)), note: 'base 2, utility ' + B.fmt(lastScores[0], 2) },
+      { name: 'Move to cover', need: 0, not: BITS.cover, add: BITS.cover, del: BITS.near, cost: 1 + cover / 5, note: '1 + cover distance / 5' },
+      { name: 'Heal', need: BITS.cover, not: BITS.healthy, add: BITS.healthy, del: 0, cost: 2, note: 'fixed, needs cover' }
+    ];
+    var names = Object.keys(BITS).filter(function (b) { return state & BITS[b]; });
+    B.$('g-state').innerHTML = 'Planner world state: <b>' + (names.length ? names.join(', ') : '(nothing true)') + '</b><br>Goal state wanted: <b>' + GOALS[gBest].want + '</b>';
+    var result = plan(state, BITS[GOALS[gBest].want], acts);
+    var h = '<tr><th>#</th><th>Action</th><th class="num">Cost</th></tr>';
+    if (!result) h += '<tr><td colspan="3">No plan reaches this goal.</td></tr>';
+    else if (!result.steps.length) h += '<tr><td colspan="3">Goal is already satisfied. Nothing to do.</td></tr>';
+    else {
+      result.steps.forEach(function (a, i) { h += '<tr><td>' + (i + 1) + '</td><td>' + a.name + '</td><td class="num">' + B.fmt(a.cost, 2) + '</td></tr>'; });
+      h += '<tr class="best"><td></td><td>Total</td><td class="num">' + B.fmt(result.cost, 2) + '</td></tr>';
+    }
+    B.$('g-plan').innerHTML = h;
+    var c = '<tr><th>Action</th><th class="num">Cost</th><th>From</th></tr>';
+    acts.forEach(function (a) { c += '<tr><td>' + a.name + '</td><td class="num">' + B.fmt(a.cost, 2) + '</td><td>' + a.note + '</td></tr>'; });
+    B.$('g-costs').innerHTML = c;
+  }
+  B.wire(['s-hp', 's-ehp', 's-dist', 's-ammo', 's-cover', 's-en', 's-al', 's-inertia', 's-comp', 'g-inertia', 'g-k'], update);
+})();
+</script>
+</body>
+</html>

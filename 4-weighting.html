@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Part 4: Normalising and weighting</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main>
+  <p class="kicker">Part 4 &middot; Chapter 13</p>
+  <h1>Normalising and weighting</h1>
+  <p class="lead">You now have many utilities, each on its own scale. Chapter 13 is about making them comparable and merging them into one number. This chapter is the direct ancestor of the Infinite Axis system.</p>
+
+  <h2 id="scales">Choosing a scale</h2>
+  <p>The book opens with a recording-studio story it calls <em>climbing fader syndrome</em>. Every musician asks for their part to be a bit louder. After an hour every fader is at the top and nothing is louder than anything else. Scores do the same thing if every factor is allowed to be "the most important".</p>
+  <p>There are three ways to state a score, and you should know which one you are using.</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>Kind</th><th>Example</th><th>Good</th><th>Bad</th></tr>
+    <tr><td><b>Absolute</b></td><td>Health is 16.</td><td>Simple, needs no context to compute.</td><td>Meaningless alone. Is 16 a lot?</td></tr>
+    <tr><td><b>Relative to a maximum</b></td><td>Health is 16 of 40, so 0.40.</td><td>Readable alone, comparable across agents, fixed range.</td><td>You must know or choose the maximum.</td></tr>
+    <tr><td><b>Relative to each other</b></td><td>This option scores 16 and the best scores 32, so 0.50.</td><td>Scales itself as the numbers grow. The ratio between options carries information.</td><td>Changes whenever the set of options changes.</td></tr>
+  </table></div>
+  <div class="note impl"><b>Which one to use</b><p>Inputs to a decision: relative to a maximum (that is normalisation, below). Choosing among final scores: relative to each other (that is the weighted random selection in Part 5).</p></div>
+
+  <h3>Granularity</h3>
+  <p>How many distinct values does a scale need? The book uses the medical pain scale, which runs 0 to 10. A 0 to 100 scale would claim a precision nobody has: no patient can tell a 62 from a 63. A 0 to 3 scale could not separate cases that need different treatment.</p>
+  <p>The rule: enough steps to tell apart the situations that should lead to different behaviour, and no more. If your agent has five visible reactions, a factor measured to six decimal places is not buying you anything.</p>
+
+  <h2 id="normalise">Normalising</h2>
+  <p>Normalising rescales a value into a standard range, almost always 0 to 1. Once everything is 0 to 1 you can compare a distance with a health value with an ammo count.</p>
+  <div class="formula">normalised = (value &minus; min) / (max &minus; min) &nbsp;&nbsp; then clamp to 0..1</div>
+
+  <div class="note book"><b>From the book: "How Much Weight?"</b><p>An RPG character carries 52 pounds and can carry at most some limit. Dividing gives <em>burden</em>, a number from 0 to 1. Movement speed, fatigue and whether the character can jump can all read burden without knowing the pounds or the limit. A weak character and a strong one share the same rules.</p></div>
+  <div class="lab">
+    <h4>Linear normalisation</h4>
+    <p class="hint">Two characters with different strength, carrying the same load.</p>
+    <div class="grid2 even">
+      <div class="ctls">
+        <label class="ctl"><span>Weight carried <output></output></span><input type="range" id="n-w" min="0" max="150" value="52" data-suffix=" lb"></label>
+        <label class="ctl"><span>Scout can carry at most <output></output></span><input type="range" id="n-a" min="20" max="150" value="65" data-suffix=" lb"></label>
+        <label class="ctl"><span>Ogre can carry at most <output></output></span><input type="range" id="n-b" min="20" max="150" value="140" data-suffix=" lb"></label>
+      </div>
+      <div><div id="n-bars"></div><div class="readout" id="n-read"></div></div>
+    </div>
+  </div>
+
+  <h3>Nonlinear normalisation</h3>
+  <p>The scale does not have to be straight. The book's "Are We There Yet?" example takes the marginal utility of building units from Part 2 and normalises the <em>progress</em>: how far along am I toward the number I want? The curve then has the same shape whether the goal is 5 units or 50.</p>
+  <div class="formula">utility of the next unit = 1 &minus; (count / goal)^k</div>
+
+  <div class="note book"><b>From the book: "Who's Next?"</b><p>Workers and soldiers each get that formula. The book gives workers the exponent 2 so their curve is flatter than the soldiers' curve. Because both results are on a 0 to 1 scale, deciding what to build is one comparison: build whichever has the higher utility. No rule mentions either goal directly.</p></div>
+  <div class="lab">
+    <h4>Build order from two normalised curves</h4>
+    <p class="hint">Press Build repeatedly. The agent always builds the unit whose next copy has the higher utility. The soldier exponent is my choice (the book only fixes the worker's at 2).</p>
+    <div class="grid2">
+      <div class="ctls">
+        <label class="ctl"><span>Worker goal <output></output></span><input type="range" id="b-wg" min="2" max="30" value="10"></label>
+        <label class="ctl"><span>Soldier goal <output></output></span><input type="range" id="b-sg" min="2" max="30" value="10"></label>
+        <label class="ctl"><span>Worker exponent <output></output></span><input type="range" id="b-wk" min="1" max="6" step="0.5" value="2"></label>
+        <label class="ctl"><span>Soldier exponent <output></output></span><input type="range" id="b-sk" min="1" max="6" step="0.5" value="4"></label>
+        <div class="row"><button class="btn primary" id="b-step" type="button">Build next</button><button class="btn" id="b-all" type="button">Build until done</button><button class="btn" id="b-reset" type="button">Reset</button></div>
+        <div class="readout" id="b-read"></div>
+      </div>
+      <div><canvas class="plot" id="b-plot"></canvas><div id="b-bars" style="margin-top:10px"></div></div>
+    </div>
+  </div>
+  <p>Change one goal to 20 and build again. The order adapts and you did not touch any logic. That is why the book calls normalised utility a way to turn moving targets into fixed ones.</p>
+
+  <h2 id="weighted">Weighted sums</h2>
+  <p>Most decisions depend on several factors that matter by different amounts. A weighted sum multiplies each normalised factor by its importance and adds the results. Dividing by the total weight puts the answer back on the 0 to 1 scale.</p>
+  <div class="formula">score = (w1&middot;v1 + w2&middot;v2 + ... + wn&middot;vn) / (w1 + w2 + ... + wn)</div>
+  <p>Only the ratio between weights matters. Weights of 2 and 1 behave exactly like 20 and 10.</p>
+
+  <div class="note book"><b>From the book: deciding on dinner</b>
+    <p>Dave and Laurie choose between four dinners. Layer one merges their two preferences, with Dave's counted twice as much (2 to 1). Layer two merges that combined <em>desire</em> with <em>price</em> and <em>time</em>, weighted 2, 3 and 5 on a busy night. Time and price are stored inverted so that 1.0 is good (quick, cheap).</p></div>
+
+  <div class="lab">
+    <h4>The two-layer dinner decision</h4>
+    <p class="hint">All starting numbers are the book's. On a busy night burritos win with 8.0. Use the "relaxed evening" button for the book's second set of weights and steak wins with 4.2.</p>
+    <div class="grid2">
+      <div class="ctls">
+        <b style="font-size:13px;color:var(--ink-2)">LAYER 1: whose taste counts</b>
+        <label class="ctl"><span>Dave's weight <output></output></span><input type="range" id="w-dave" min="0" max="5" step="0.5" value="2"></label>
+        <label class="ctl"><span>Laurie's weight <output></output></span><input type="range" id="w-laurie" min="0" max="5" step="0.5" value="1"></label>
+        <b style="font-size:13px;color:var(--ink-2);margin-top:6px">LAYER 2: what matters tonight</b>
+        <label class="ctl"><span>Time <output></output></span><input type="range" id="w-time" min="0" max="6" step="0.5" value="5"></label>
+        <label class="ctl"><span>Price <output></output></span><input type="range" id="w-price" min="0" max="6" step="0.5" value="3"></label>
+        <label class="ctl"><span>Desire <output></output></span><input type="range" id="w-desire" min="0" max="6" step="0.5" value="2"></label>
+        <div class="row"><button class="btn" id="w-busy" type="button">Busy night (5, 3, 2)</button><button class="btn" id="w-relax" type="button">Relaxed evening (1, 1, 4)</button></div>
+      </div>
+      <div>
+        <div class="tbl-wrap"><table id="w-table"></table></div>
+        <div id="w-bars"></div>
+        <div class="verdict" id="w-verdict"></div>
+      </div>
+    </div>
+  </div>
+
+  <h2 id="layers">Layered models and compartmentalised confidence</h2>
+  <p>The dinner example has three places where a change alters the answer: the individual tastes, the weights that merge them into desire, and the weights that merge desire with time and price. A change at the bottom travels all the way up. The book calls this <em>propagation of change</em>.</p>
+  <p>Layering is what keeps large models manageable, as long as you follow one discipline.</p>
+  <div class="note impl"><b>Compartmentalised confidence</b>
+    <p>Test each small piece by itself until you trust it. Then treat it as a black box when you build the next layer. If the dinner result looks wrong, you check one layer at a time, and you only change the layer where the fault is. Without this, every bad result sends you tuning twenty numbers at once.</p>
+    <p>Two habits make it work: keep every layer's inputs on the same scale (the book notes that scoring Dave 0 to 3 and Laurie 0 to 5 would quietly change the 2 to 1 ratio), and give each layer one job.</p></div>
+
+  <h3>Weighted sum or multiplication?</h3>
+  <p>The book's main combining tool is the weighted sum, but its big example in Part 5 also multiplies and divides factors. The difference matters when you move to the Infinite Axis system, which multiplies.</p>
+  <div class="lab">
+    <h4>Add or multiply</h4>
+    <p class="hint">Decision: shoot the enemy. Two factors, both 0 to 1. Drag ammo to zero and compare.</p>
+    <div class="grid2 even">
+      <div class="ctls">
+        <label class="ctl"><span>Enemy is a good target <output></output></span><input type="range" id="x-a" min="0" max="1" step="0.05" value="0.9"></label>
+        <label class="ctl"><span>I have ammo <output></output></span><input type="range" id="x-b" min="0" max="1" step="0.05" value="0.5"></label>
+      </div>
+      <div><div id="x-bars"></div><div class="readout" id="x-read"></div></div>
+    </div>
+  </div>
+  <p>A weighted sum lets a strong factor make up for a weak one. That suits "which dinner". Multiplication lets any factor veto the option by going to zero. That suits "can I even do this". Part 6 uses the second.</p>
+
+  <details><summary>Check yourself</summary>
+    <ol>
+      <li>You weight health 3 and distance 1, but health is 0 to 100 and distance 0 to 1. What have you actually built? <em>(Health dominates by roughly 300 to 1. Normalise first, then weight.)</em></li>
+      <li>In the dinner example, why does Chinese take-out lose even though Laurie rates it 0.7? <em>(Dave rates it 0.1 and his weight is double, so combined desire is only 0.3.)</em></li>
+      <li>A result looks wrong in a three-layer model. What is the first step? <em>(Check each layer's output alone to find which layer is wrong, before changing anything.)</em></li>
+    </ol>
+  </details>
+</main>
+<script src="assets/app.js"></script>
+<script>
+(function () {
+  var B = BM;
+
+  /* linear normalisation */
+  B.wire(['n-w', 'n-a', 'n-b'], function () {
+    var w = B.val('n-w'), a = B.val('n-a'), b = B.val('n-b');
+    var ba = B.clamp(w / a, 0, 1), bb = B.clamp(w / b, 0, 1);
+    B.bars('n-bars', [{ label: 'Scout burden', value: ba }, { label: 'Ogre burden', value: bb }], { max: 1, digits: 2 });
+    var rule = function (x) { return x >= 1 ? 'cannot move' : x > 0.75 ? 'no jumping, slow' : x > 0.4 ? 'tires faster' : 'unhindered'; };
+    B.$('n-read').innerHTML = 'Scout: ' + w + ' / ' + a + ' = <b>' + B.fmt(ba, 2) + '</b> &rarr; ' + rule(ba) +
+      '<br>Ogre: ' + w + ' / ' + b + ' = <b>' + B.fmt(bb, 2) + '</b> &rarr; ' + rule(bb) + '<br>One rule set, read from burden only.';
+  });
+
+  /* build order */
+  var workers = 0, soldiers = 0, log = [];
+  var bp = new B.Plot('b-plot', { xmin: 0, xmax: 1, ymin: 0, ymax: 1, xlabel: 'progress toward goal (count / goal)', ylabel: 'utility of next unit' });
+  function uW() { return Math.max(0, 1 - Math.pow(workers / B.val('b-wg'), B.val('b-wk'))); }
+  function uS() { return Math.max(0, 1 - Math.pow(soldiers / B.val('b-sg'), B.val('b-sk'))); }
+  function drawBuild() {
+    var wk = B.val('b-wk'), sk = B.val('b-sk'), wg = B.val('b-wg'), sg = B.val('b-sg');
+    bp.draw([{ fn: function (x) { return 1 - Math.pow(x, wk); }, color: '--c2', label: 'worker' }, { fn: function (x) { return 1 - Math.pow(x, sk); }, color: '--c1', label: 'soldier' }],
+      [{ x: Math.min(1, workers / wg), y: uW(), color: '--c2' }, { x: Math.min(1, soldiers / sg), y: uS(), color: '--c1' }]);
+    B.bars('b-bars', [{ label: 'Next worker (' + workers + '/' + wg + ')', value: uW(), color: '--c2' }, { label: 'Next soldier (' + soldiers + '/' + sg + ')', value: uS(), color: '--c1' }], { max: 1, digits: 2 });
+    B.$('b-read').innerHTML = 'Build order so far:<br><b>' + (log.length ? log.join(' ') : '(nothing yet)') + '</b>';
+  }
+  function step() {
+    var w = uW(), s = uS(); if (w <= 0 && s <= 0) return false;
+    if (s >= w) { soldiers++; log.push('S'); } else { workers++; log.push('W'); }
+    return true;
+  }
+  B.$('b-step').addEventListener('click', function () { step(); drawBuild(); });
+  B.$('b-all').addEventListener('click', function () { var guard = 0; while (step() && guard++ < 200) { /* loop */ } drawBuild(); });
+  function resetBuild() { workers = 0; soldiers = 0; log = []; drawBuild(); }
+  B.$('b-reset').addEventListener('click', resetBuild);
+  B.wire(['b-wg', 'b-sg', 'b-wk', 'b-sk'], resetBuild);
+
+  /* dinner */
+  var meals = ['Steak dinner', 'Chinese take-out', 'Microwave burritos', 'Frozen pizza'];
+  var dave = [1.0, 0.1, 0.4, 0.4], laurie = [1.0, 0.7, 0.1, 0.6], time = [0.1, 0.3, 1.0, 0.7], price = [0.1, 0.6, 0.8, 1.0];
+  B.wire(['w-dave', 'w-laurie', 'w-time', 'w-price', 'w-desire'], function () {
+    var wd = B.val('w-dave'), wl = B.val('w-laurie'), wt = B.val('w-time'), wp = B.val('w-price'), wde = B.val('w-desire');
+    var rows = '<tr><th>Option</th><th class="num">Dave</th><th class="num">Laurie</th><th class="num">Desire</th><th class="num">Time</th><th class="num">Price</th><th class="num">Utility</th></tr>';
+    var items = [], best = -1, bestV = -1;
+    meals.forEach(function (m, i) {
+      var desire = (wd + wl) > 0 ? (wd * dave[i] + wl * laurie[i]) / (wd + wl) : 0;
+      var u = wt * time[i] + wp * price[i] + wde * desire;
+      if (u > bestV) { bestV = u; best = i; }
+      items.push({ label: m, value: u, desire: desire });
+    });
+    items.forEach(function (it, i) {
+      rows += '<tr' + (i === best ? ' class="best"' : '') + '><td>' + it.label + '</td><td class="num">' + dave[i].toFixed(1) + '</td><td class="num">' + laurie[i].toFixed(1) +
+        '</td><td class="num">' + it.desire.toFixed(2) + '</td><td class="num">' + time[i].toFixed(1) + '</td><td class="num">' + price[i].toFixed(1) + '</td><td class="num">' + it.value.toFixed(1) + '</td></tr>';
+    });
+    B.$('w-table').innerHTML = rows;
+    B.bars('w-bars', items, { best: 'max', digits: 1 });
+    B.$('w-verdict').textContent = 'Tonight: ' + meals[best];
+  });
+  function setW(t, p, d) {
+    B.$('w-time').value = t; B.$('w-price').value = p; B.$('w-desire').value = d;
+    B.$('w-time').dispatchEvent(new Event('input'));
+  }
+  B.$('w-busy').addEventListener('click', function () { setW(5, 3, 2); });
+  B.$('w-relax').addEventListener('click', function () { setW(1, 1, 4); });
+
+  /* add vs multiply */
+  B.wire(['x-a', 'x-b'], function () {
+    var a = B.val('x-a'), b = B.val('x-b');
+    B.bars('x-bars', [{ label: 'Weighted sum (equal weights)', value: (a + b) / 2 }, { label: 'Product', value: a * b }], { max: 1, digits: 2 });
+    B.$('x-read').innerHTML = '(' + B.fmt(a, 2) + ' + ' + B.fmt(b, 2) + ') / 2 = <b>' + B.fmt((a + b) / 2, 2) + '</b><br>' + B.fmt(a, 2) + ' &times; ' + B.fmt(b, 2) + ' = <b>' + B.fmt(a * b, 2) + '</b>' +
+      (b === 0 ? '<br>No ammo: the sum still says ' + B.fmt(a / 2, 2) + ', the product says 0.' : '');
+  });
+})();
+</script>
+</body>
+</html>
